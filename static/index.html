@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sabermetric Optimization Engine</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        /* CSS VARIABLES FOR DYNAMIC COLOR SCHEMES */
+        :root {
+            /* Default: Chicago Cubs Theme */
+            --primary: #0E3386;
+            --primary-rgb: 14, 51, 134;
+            --accent: #CC3433;
+            --accent-rgb: 204, 52, 51;
+            --bg-dark: #090e1a;
+            --card-bg: rgba(20, 30, 55, 0.65);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --input-bg: rgba(10, 15, 30, 0.6);
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --glow-color: rgba(14, 51, 134, 0.3);
+            --toggle-bg: rgba(255, 255, 255, 0.08);
+            --transition-speed: 0.4s;
+        }
+
+        /* TRANSITION FOR THEME FLIPPING */
+        body, header, div, span, button, input, select {
+            transition: background-color var(--transition-speed) ease, 
+                        border-color var(--transition-speed) ease, 
+                        box-shadow var(--transition-speed) ease,
+                        color var(--transition-speed) ease;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: radial-gradient(circle at 50% 0%, rgba(var(--primary-rgb), 0.15) 0%, var(--bg-dark) 75%);
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            min-height: 100vh;
+            line-height: 1.5;
+            padding-bottom: 3rem;
+            overflow-x: hidden;
+        }
+
+        h1, h2, h3, h4 {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 700;
+        }
+
+        /* CONTAINER */
+        .container {
+            max-width: 1300px;
+            margin: 0 auto;
+            padding: 1.5rem;
+        }
+
+        /* GLASS CARD COMMON STYLE */
+        .glass-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        /* HEADER */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid var(--card-border);
+            padding-bottom: 1.5rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .logo-icon {
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.3rem;
+            box-shadow: 0 0 15px var(--glow-color);
+        }
+
+        .logo-title h1 {
+            font-size: 1.5rem;
+            letter-spacing: -0.5px;
+            background: linear-gradient(to right, var(--text-main), var(--text-muted));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo-title p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 600;
+        }
+
+        .team-selector-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .theme-toggle-btn {
+            background: var(--toggle-bg);
+            border: 1px solid var(--card-border);
+            color: var(--text-main);
+            padding: 0.55rem 0.85rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .theme-toggle-btn:hover {
+            opacity: 0.9;
+            transform: translateY(-0.5px);
+        }
+
+        .select-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        select.team-dropdown {
+            background: var(--input-bg);
+            border: 1px solid var(--card-border);
+            color: var(--text-main);
+            padding: 0.6rem 2rem 0.6rem 1rem;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            outline: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.7rem center;
+            background-size: 1.1rem;
+            min-width: 200px;
+        }
+
+        select.team-dropdown:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 10px var(--glow-color);
+        }
+
+        /* LAYOUT GRID */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 1.5rem;
+            align-items: start;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* CARD SUBSECTIONS */
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.25rem;
+            border-bottom: 1px solid var(--card-border);
+            padding-bottom: 0.75rem;
+        }
+
+        .card-header h2 {
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card-header svg {
+            width: 20px;
+            height: 20px;
+            fill: var(--primary);
+        }
+
+        /* CONFIGURATION FORM PANEL */
+        .config-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .input-group label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .input-group input, .input-group select {
+            background: var(--input-bg);
+            border: 1px solid var(--card-border);
+            color: var(--text-main);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 0.85rem;
+            outline: none;
+        }
+
+        .input-group input:focus, .input-group select:focus {
+            border-color: var(--primary);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.7));
+            color: #fff;
+            border: none;
+            padding: 0.65rem 1rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-family: inherit;
+            font-size: 0.85rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            width: 100%;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        /* LINEUP PANEL */
+        .lineup-controls {
+            display: flex;
+            justify-content: flex-start;
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+            flex-wrap: wrap;
+        }
+
+        .lineup-controls .input-group {
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .lineup-table-wrapper {
+            overflow-x: auto;
+        }
+
+        table.lineup-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.85rem;
+        }
+
+        table.lineup-table th {
+            color: var(--text-muted);
+            font-weight: 600;
+            padding: 0.75rem 0.5rem;
+            border-bottom: 1px solid var(--card-border);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+        }
+
+        table.lineup-table td {
+            padding: 0.85rem 0.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            font-weight: 500;
+        }
+
+        table.lineup-table tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .order-badge {
+            background: rgba(var(--primary-rgb), 0.2);
+            color: #fff;
+            border: 1px solid rgba(var(--primary-rgb), 0.4);
+            border-radius: 6px;
+            font-weight: 700;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+        }
+
+        .pos-badge {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .hand-badge {
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+
+        .factor-tag {
+            font-size: 0.75rem;
+            padding: 0.1rem 0.3rem;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .factor-green {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+        }
+
+        .factor-red {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+        }
+
+        .factor-neutral {
+            background: rgba(156, 163, 175, 0.1);
+            color: #d1d5db;
+        }
+
+        .ops-value {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 700;
+            font-size: 0.95rem;
+        }
+
+        .ops-adjusted {
+            color: var(--primary);
+        }
+
+        /* TACTICAL SUB PANEL */
+        .tactical-section {
+            margin-top: 1.5rem;
+            grid-column: 1 / -1;
+        }
+
+        .tactical-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 2fr;
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 900px) {
+            .tactical-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .tactical-form {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .tactical-form .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .sub-result-card {
+            background: var(--input-bg);
+            border-radius: 12px;
+            border: 1px solid var(--card-border);
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 250px;
+        }
+
+        .result-placeholder {
+            text-align: center;
+            color: var(--text-muted);
+        }
+
+        .result-placeholder svg {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 0.75rem;
+            stroke: rgba(255, 255, 255, 0.15);
+        }
+
+        .decision-banner {
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            font-weight: 800;
+            text-align: center;
+            font-size: 1.1rem;
+            letter-spacing: 1px;
+            margin-bottom: 1.25rem;
+            text-transform: uppercase;
+        }
+
+        .decision-insert {
+            background: linear-gradient(135deg, #059669, #10b981);
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+            border: 1px solid rgba(16, 185, 129, 0.6);
+            color: #fff;
+        }
+
+        .decision-hold {
+            background: linear-gradient(135deg, #b91c1c, #ef4444);
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+            border: 1px solid rgba(239, 68, 68, 0.6);
+            color: #fff;
+        }
+
+        .sub-comparison {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 1.25rem;
+            gap: 1rem;
+        }
+
+        .comp-box {
+            flex: 1;
+            background: var(--input-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 0.75rem;
+            text-align: center;
+        }
+
+        .comp-box p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+        }
+
+        .comp-box h3 {
+            font-size: 1rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 0.25rem;
+        }
+
+        .comp-box .ops {
+            font-size: 1.2rem;
+            font-weight: 800;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .ops-gain {
+            color: #34d399;
+        }
+
+        .ops-loss {
+            color: #f87171;
+        }
+
+        .reasoning-text {
+            font-size: 0.85rem;
+            color: var(--text-main);
+            background: rgba(var(--primary-rgb), 0.08);
+            padding: 0.85rem;
+            border-radius: 8px;
+            border-left: 3px solid var(--primary);
+            line-height: 1.4;
+        }
+
+        .sub-active-header {
+            color: var(--accent);
+        }
+
+        /* STADIUM CONTEXT PANEL */
+        .stadium-stats {
+            display: flex;
+            flex-direction: column;
+            gap: 0.85rem;
+            margin-top: 1rem;
+        }
+
+        .stadium-stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            padding-bottom: 0.5rem;
+        }
+
+        .stadium-stat-row span:first-child {
+            color: var(--text-muted);
+        }
+
+        .stadium-stat-row span:last-child {
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- HEADER -->
+        <header>
+            <div class="logo-section">
+                <div class="logo-icon">⚾</div>
+                <div class="logo-title">
+                    <h1>Sabermetric Optimization Engine</h1>
+                    <p>Behavioral & Ballpark Predictive System</p>
+                </div>
+            </div>
+            
+            <div class="team-selector-wrapper">
+                <button id="themeToggleBtn" class="theme-toggle-btn" onclick="toggleThemeMode()">🌙 Dark Mode</button>
+                <span class="select-label">Active Team Scope:</span>
+                <select id="teamDropdown" class="team-dropdown" onchange="handleTeamChange(this.value)">
+                    <option value="112">Chicago Cubs (CHC)</option>
+                    <option value="111">Boston Red Sox (BOS)</option>
+                    <option value="11111">New York Yankees (NYY)</option>
+                    <option value="11112">Los Angeles Dodgers (LAD)</option>
+                    <option value="11113">San Francisco Giants (SF)</option>
+                </select>
+            </div>
+        </header>
+
+        <!-- DASHBOARD GRID -->
+        <div class="dashboard-grid">
+            
+            <!-- LEFT PANEL: CONFIG & STADIUM -->
+            <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                
+                <!-- STADIUM ENVIRONMENT CONFIG -->
+                <div class="glass-card">
+                    <div class="card-header">
+                        <h2>
+                            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                            Live Ballpark Conditions
+                        </h2>
+                    </div>
+                    
+                    <form id="envForm" onsubmit="updateEnvironment(event)">
+                        <div class="config-grid">
+                            <div class="input-group">
+                                <label for="tempInput">Temp (°F)</label>
+                                <input type="number" id="tempInput" value="70" step="0.5" required>
+                            </div>
+                            <div class="input-group">
+                                <label for="humidityInput">Humidity (%)</label>
+                                <input type="number" id="humidityInput" value="50" min="0" max="100" required>
+                            </div>
+                            <div class="input-group">
+                                <label for="windVelocityInput">Wind Speed (mph)</label>
+                                <input type="number" id="windVelocityInput" value="10" step="0.5" required>
+                            </div>
+                            <div class="input-group">
+                                <label for="windDirSelect">Wind Direction</label>
+                                <select id="windDirSelect">
+                                    <option value="Out">Out (Outward)</option>
+                                    <option value="In">In (Inward)</option>
+                                    <option value="Cross-Left">Cross-Left</option>
+                                    <option value="Cross-Right">Cross-Right</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn">Update Live Weather</button>
+                    </form>
+
+                    <div class="stadium-stats">
+                        <div class="stadium-stat-row">
+                            <span>Stadium Profile</span>
+                            <span id="lblStadiumName">Wrigley Field</span>
+                        </div>
+                        <div class="stadium-stat-row">
+                            <span>Elevation (Altitude)</span>
+                            <span id="lblElevation">600 ft</span>
+                        </div>
+                        <div class="stadium-stat-row">
+                            <span>Base Park Factor</span>
+                            <span id="lblParkFactor">1.030</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MANAGERIAL Philosophy OVERRIDES -->
+                <div class="glass-card">
+                    <div class="card-header">
+                        <h2>
+                            <svg viewBox="0 0 24 24"><path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm1-11V7h-2v4H7v2h4v4h2v-4h4v-2h-4z"/></svg>
+                            Coaching Philosophy
+                        </h2>
+                    </div>
+                    
+                    <form id="mgrForm" onsubmit="updateManagerial(event)">
+                        <div class="config-grid">
+                            <div class="input-group">
+                                <label for="fatigueThresholdInput">Fatigue Threshold</label>
+                                <input type="number" id="fatigueThresholdInput" value="5" min="1" max="15" required>
+                            </div>
+                            <div class="input-group">
+                                <label for="clutchWeightInput">Clutch Weight</label>
+                                <input type="number" id="clutchWeightInput" value="1.0" step="0.1" min="0.1" max="5.0" required>
+                            </div>
+                            <div class="input-group">
+                                <label for="defInningInput">Def Sub Inning</label>
+                                <input type="number" id="defInningInput" value="7" min="1" max="9" required>
+                            </div>
+                            <div class="input-group">
+                                <label for="frictionTaxInput">Cold Bench Penalty</label>
+                                <input type="number" id="frictionTaxInput" value="0.15" step="0.01" min="0.00" max="0.50" required>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn">Save Override Policy</button>
+                    </form>
+                </div>
+
+            </div>
+
+            <!-- RIGHT PANEL: ROSTER BATTING ORDER -->
+            <div class="glass-card" style="min-height: 520px;">
+                <div class="card-header">
+                    <h2>
+                        <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V7h10v2zm0 8H7v-2h10v2z"/></svg>
+                        Optimized Batting Lineup (1-9 Order)
+                    </h2>
+                </div>
+
+                <div class="lineup-controls">
+                    <div class="input-group">
+                        <label for="pitcherHandSelect">Opposing Pitcher Handedness</label>
+                        <select id="pitcherHandSelect" onchange="fetchLineup()">
+                            <option value="R">R (Right-Handed)</option>
+                            <option value="L">L (Left-Handed)</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="leverageSelect">Leverage Index (LI)</label>
+                        <select id="leverageSelect" onchange="fetchLineup()">
+                            <option value="normal">Normal Leverage (Low/Medium LI)</option>
+                            <option value="high">High Leverage (Spike / Crisis Moments)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="lineup-table-wrapper">
+                    <table class="lineup-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 5%">Order</th>
+                                <th style="width: 25%">Player</th>
+                                <th style="width: 10%">Pos</th>
+                                <th style="width: 8%">Bat</th>
+                                <th style="width: 12%">Base OPS</th>
+                                <th style="width: 12%">Adjusted OPS</th>
+                                <th style="width: 28%">Athletic Modulators</th>
+                            </tr>
+                        </thead>
+                        <tbody id="lineupBody">
+                            <!-- JS populated rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TACTICAL SUBSTITUTION SANDBOX -->
+            <div class="glass-card tactical-section">
+                <div class="card-header">
+                    <h2>
+                        <svg viewBox="0 0 24 24"><path d="M16 17.01V10h-2v7.01h-3L15 21l4-3.99h-3zM9 3L5 6.99h3V14h2V6.99h3L9 3z"/></svg>
+                        Live Tactical Pinch-Hitter Evaluator
+                    </h2>
+                </div>
+
+                <div class="tactical-grid">
+                    
+                    <!-- Sandbox Game State Controls -->
+                    <form class="tactical-form" onsubmit="runTacticalSub(event)">
+                        <div class="input-group">
+                            <label for="subInning">Inning</label>
+                            <input type="number" id="subInning" value="8" min="1" max="18" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="subHalfInning">Half-Inning</label>
+                            <select id="subHalfInning">
+                                <option value="top">Top</option>
+                                <option value="bottom" selected>Bottom</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label for="subOuts">Outs</label>
+                            <select id="subOuts">
+                                <option value="0">0 Outs</option>
+                                <option value="1" selected>1 Out</option>
+                                <option value="2">2 Outs</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label for="subPitcherHand">Active Pitcher Hand</label>
+                            <select id="subPitcherHand">
+                                <option value="L">L (Left-Handed)</option>
+                                <option value="R" selected>R (Right-Handed)</option>
+                            </select>
+                        </div>
+                        <div class="input-group full-width">
+                            <label for="subRunDifference">Score Differential (Batting Team Rel.)</label>
+                            <input type="number" id="subRunDifference" value="-1" required>
+                            <span style="font-size: 0.7rem; color: var(--text-muted);">e.g. -1 if batting team is losing by 1 run</span>
+                        </div>
+                        <div class="input-group full-width">
+                            <label for="subActiveBatter">Active Batter</label>
+                            <select id="subActiveBatter">
+                                <!-- JS populated options -->
+                            </select>
+                        </div>
+                        
+                        <div class="full-width" style="margin-top: 0.5rem;">
+                            <button type="submit" class="btn">Evaluate Decision</button>
+                        </div>
+                    </form>
+
+                    <!-- Evaluation Decision Display -->
+                    <div id="subResultCard" class="sub-result-card">
+                        <div class="result-placeholder">
+                            <svg fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin='round' stroke-width='1.5' d='M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z'/></svg>
+                            <p>Configure live game parameters and click "Evaluate Decision" to analyze tactical Sabermetric substitution recommendations.</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MAIN FRONTEND LOGIC -->
+    <script>
+        // Color palettes for teams to update CSS variables on the fly for both Dark and Light modes
+        const teamColors = {
+            // Chicago Cubs (Royal Blue + Red)
+            "112": {
+                "dark": {
+                    "primary": "#0E3386",
+                    "primary-rgb": "14, 51, 134",
+                    "accent": "#CC3433",
+                    "accent-rgb": "204, 52, 51",
+                    "bg-dark": "#090e1a",
+                    "card-bg": "rgba(20, 30, 55, 0.65)",
+                    "card-border": "rgba(255, 255, 255, 0.08)",
+                    "input-bg": "rgba(10, 15, 30, 0.6)",
+                    "text-main": "#f3f4f6",
+                    "text-muted": "#9ca3af",
+                    "glow-color": "rgba(14, 51, 134, 0.3)",
+                    "toggle-bg": "rgba(255, 255, 255, 0.08)"
+                },
+                "light": {
+                    "primary": "#0E3386",
+                    "primary-rgb": "14, 51, 134",
+                    "accent": "#CC3433",
+                    "accent-rgb": "204, 52, 51",
+                    "bg-dark": "#f0f3fa",
+                    "card-bg": "rgba(255, 255, 255, 0.75)",
+                    "card-border": "rgba(14, 51, 134, 0.15)",
+                    "input-bg": "rgba(255, 255, 255, 0.8)",
+                    "text-main": "#1f2937",
+                    "text-muted": "#4b5563",
+                    "glow-color": "rgba(14, 51, 134, 0.15)",
+                    "toggle-bg": "rgba(0, 0, 0, 0.05)"
+                }
+            },
+            // Boston Red Sox (Navy + Red)
+            "111": {
+                "dark": {
+                    "primary": "#0C2340",
+                    "primary-rgb": "12, 35, 64",
+                    "accent": "#BD3039",
+                    "accent-rgb": "189, 48, 57",
+                    "bg-dark": "#0a0c10",
+                    "card-bg": "rgba(22, 28, 38, 0.65)",
+                    "card-border": "rgba(255, 255, 255, 0.08)",
+                    "input-bg": "rgba(10, 15, 30, 0.6)",
+                    "text-main": "#f3f4f6",
+                    "text-muted": "#9ca3af",
+                    "glow-color": "rgba(12, 35, 64, 0.4)",
+                    "toggle-bg": "rgba(255, 255, 255, 0.08)"
+                },
+                "light": {
+                    "primary": "#0C2340",
+                    "primary-rgb": "12, 35, 64",
+                    "accent": "#BD3039",
+                    "accent-rgb": "189, 48, 57",
+                    "bg-dark": "#f4f5f7",
+                    "card-bg": "rgba(255, 255, 255, 0.75)",
+                    "card-border": "rgba(12, 35, 64, 0.15)",
+                    "input-bg": "rgba(255, 255, 255, 0.8)",
+                    "text-main": "#1f2937",
+                    "text-muted": "#4b5563",
+                    "glow-color": "rgba(12, 35, 64, 0.15)",
+                    "toggle-bg": "rgba(0, 0, 0, 0.05)"
+                }
+            },
+            // New York Yankees (Midnight Navy + Silver)
+            "11111": {
+                "dark": {
+                    "primary": "#0C2340",
+                    "primary-rgb": "12, 35, 64",
+                    "accent": "#C4CED4",
+                    "accent-rgb": "196, 206, 212",
+                    "bg-dark": "#060a12",
+                    "card-bg": "rgba(18, 26, 38, 0.7)",
+                    "card-border": "rgba(255, 255, 255, 0.08)",
+                    "input-bg": "rgba(10, 15, 30, 0.6)",
+                    "text-main": "#f3f4f6",
+                    "text-muted": "#9ca3af",
+                    "glow-color": "rgba(196, 206, 212, 0.15)",
+                    "toggle-bg": "rgba(255, 255, 255, 0.08)"
+                },
+                "light": {
+                    "primary": "#0C2340",
+                    "primary-rgb": "12, 35, 64",
+                    "accent": "#8A9EA7",
+                    "accent-rgb": "138, 158, 167",
+                    "bg-dark": "#f0f2f5",
+                    "card-bg": "rgba(255, 255, 255, 0.8)",
+                    "card-border": "rgba(12, 35, 64, 0.12)",
+                    "input-bg": "rgba(255, 255, 255, 0.85)",
+                    "text-main": "#111827",
+                    "text-muted": "#4b5563",
+                    "glow-color": "rgba(12, 35, 64, 0.15)",
+                    "toggle-bg": "rgba(0, 0, 0, 0.05)"
+                }
+            },
+            // Los Angeles Dodgers (Dodger Blue + Silver)
+            "11112": {
+                "dark": {
+                    "primary": "#005A9C",
+                    "primary-rgb": "0, 90, 156",
+                    "accent": "#A5ACAF",
+                    "accent-rgb": "165, 172, 175",
+                    "bg-dark": "#040c16",
+                    "card-bg": "rgba(15, 30, 50, 0.65)",
+                    "card-border": "rgba(255, 255, 255, 0.08)",
+                    "input-bg": "rgba(10, 15, 30, 0.6)",
+                    "text-main": "#f3f4f6",
+                    "text-muted": "#9ca3af",
+                    "glow-color": "rgba(0, 90, 156, 0.35)",
+                    "toggle-bg": "rgba(255, 255, 255, 0.08)"
+                },
+                "light": {
+                    "primary": "#005A9C",
+                    "primary-rgb": "0, 90, 156",
+                    "accent": "#5C88A8",
+                    "accent-rgb": "92, 136, 168",
+                    "bg-dark": "#edf4f9",
+                    "card-bg": "rgba(255, 255, 255, 0.75)",
+                    "card-border": "rgba(0, 90, 156, 0.12)",
+                    "input-bg": "rgba(255, 255, 255, 0.8)",
+                    "text-main": "#1f2937",
+                    "text-muted": "#4b5563",
+                    "glow-color": "rgba(0, 90, 156, 0.15)",
+                    "toggle-bg": "rgba(0, 0, 0, 0.05)"
+                }
+            },
+            // San Francisco Giants (Orange + Black)
+            "11113": {
+                "dark": {
+                    "primary": "#FD5A1E",
+                    "primary-rgb": "253, 90, 30",
+                    "accent": "#27251F",
+                    "accent-rgb": "39, 37, 31",
+                    "bg-dark": "#0d0a08",
+                    "card-bg": "rgba(35, 25, 20, 0.7)",
+                    "card-border": "rgba(255, 255, 255, 0.08)",
+                    "input-bg": "rgba(10, 15, 30, 0.6)",
+                    "text-main": "#f3f4f6",
+                    "text-muted": "#9ca3af",
+                    "glow-color": "rgba(253, 90, 30, 0.25)",
+                    "toggle-bg": "rgba(255, 255, 255, 0.08)"
+                },
+                "light": {
+                    "primary": "#FD5A1E",
+                    "primary-rgb": "253, 90, 30",
+                    "accent": "#27251F",
+                    "accent-rgb": "39, 37, 31",
+                    "bg-dark": "#fffbf7",
+                    "card-bg": "rgba(255, 255, 255, 0.8)",
+                    "card-border": "rgba(253, 90, 30, 0.12)",
+                    "input-bg": "rgba(255, 255, 255, 0.85)",
+                    "text-main": "#27251F",
+                    "text-muted": "#5c5647",
+                    "glow-color": "rgba(253, 90, 30, 0.15)",
+                    "toggle-bg": "rgba(0, 0, 0, 0.05)"
+                }
+            }
+        };
+
+        let currentActiveRoster = [];
+        let isDarkMode = true;
+
+        // Initialize App on load
+        window.addEventListener("DOMContentLoaded", () => {
+            fetchConfig();
+        });
+
+        function toggleThemeMode() {
+            isDarkMode = !isDarkMode;
+            const btn = document.getElementById("themeToggleBtn");
+            btn.innerHTML = isDarkMode ? "🌙 Dark Mode" : "☀️ Light Mode";
+            
+            // Re-apply current team colors
+            const selectEl = document.getElementById("teamDropdown");
+            applyTeamColors(selectEl.value);
+        }
+
+        // Set CSS Variables according to team and mode selected
+        function applyTeamColors(teamId) {
+            const teamData = teamColors[teamId] || teamColors["112"]; // fallback to Cubs
+            const mode = isDarkMode ? "dark" : "light";
+            const colors = teamData[mode];
+            
+            document.documentElement.style.setProperty('--primary', colors["primary"]);
+            document.documentElement.style.setProperty('--primary-rgb', colors["primary-rgb"]);
+            document.documentElement.style.setProperty('--accent', colors["accent"]);
+            document.documentElement.style.setProperty('--accent-rgb', colors["accent-rgb"]);
+            document.documentElement.style.setProperty('--bg-dark', colors["bg-dark"]);
+            document.documentElement.style.setProperty('--card-bg', colors["card-bg"]);
+            document.documentElement.style.setProperty('--card-border', colors["card-border"]);
+            document.documentElement.style.setProperty('--input-bg', colors["input-bg"]);
+            document.documentElement.style.setProperty('--text-main', colors["text-main"]);
+            document.documentElement.style.setProperty('--text-muted', colors["text-muted"]);
+            document.documentElement.style.setProperty('--glow-color', colors["glow-color"]);
+            document.documentElement.style.setProperty('--toggle-bg', colors["toggle-bg"]);
+        }
+
+        // Fetch config details on load or on team context flip
+        async function fetchConfig() {
+            try {
+                const response = await fetch("/api/v1/config");
+                if (!response.ok) throw new Error("Could not retrieve active configuration context");
+                const data = await response.json();
+                
+                // Set active dropdown index
+                const selectEl = document.getElementById("teamDropdown");
+                
+                // If it is a dynamically added team (not in pre-built options), we add it to the select!
+                let optionFound = false;
+                for (let i = 0; i < selectEl.options.length; i++) {
+                    if (selectEl.options[i].value == data.active_team_id) {
+                        selectEl.selectedIndex = i;
+                        optionFound = true;
+                        break;
+                    }
+                }
+                
+                if (!optionFound) {
+                    const newOpt = document.createElement("option");
+                    newOpt.value = data.active_team_id;
+                    newOpt.text = `${data.active_team_name} (${data.location_abbr})`;
+                    selectEl.add(newOpt);
+                    selectEl.selectedIndex = selectEl.options.length - 1;
+                }
+
+                // Apply Colors dynamically
+                applyTeamColors(data.active_team_id);
+
+                // Update Ballpark text display labels
+                document.getElementById("lblStadiumName").innerText = data.stadium_name;
+                document.getElementById("lblElevation").innerText = `${data.elevation.toLocaleString()} ft`;
+                document.getElementById("lblParkFactor").innerText = data.base_park_factor.toFixed(3);
+
+                // Update Ballpark Forms
+                if (data.environmental_context) {
+                    document.getElementById("tempInput").value = data.environmental_context.temperature;
+                    document.getElementById("humidityInput").value = data.environmental_context.humidity;
+                    document.getElementById("windVelocityInput").value = data.environmental_context.wind_velocity;
+                    document.getElementById("windDirSelect").value = data.environmental_context.wind_direction;
+                }
+
+                // Update Manager Philosophy forms
+                if (data.managerial_override) {
+                    document.getElementById("fatigueThresholdInput").value = data.managerial_override.fatigue_threshold;
+                    document.getElementById("clutchWeightInput").value = data.managerial_override.clutch_weight.toFixed(1);
+                    document.getElementById("defInningInput").value = data.managerial_override.defensive_sub_inning;
+                    document.getElementById("frictionTaxInput").value = data.managerial_override.cold_bench_friction_tax.toFixed(2);
+                }
+
+                // Load optimization table and batter selection options
+                await fetchLineup();
+
+            } catch (err) {
+                console.error("Config fetch error: ", err);
+                alert("Failed to load environment context: " + err.message);
+            }
+        }
+
+        // Trigger context swap to server, reload theme & config
+        async function handleTeamChange(teamId) {
+            const teamPayloads = {
+                "112": {
+                    "team_id": 112,
+                    "name": "Chicago Cubs",
+                    "location_abbr": "CHC",
+                    "stadium_name": "Wrigley Field",
+                    "elevation": 600.0,
+                    "base_park_factor": 1.03
+                },
+                "111": {
+                    "team_id": 111,
+                    "name": "Boston Red Sox",
+                    "location_abbr": "BOS",
+                    "stadium_name": "Fenway Park",
+                    "elevation": 20.0,
+                    "base_park_factor": 1.07
+                },
+                "11111": {
+                    "team_id": 11111,
+                    "name": "New York Yankees",
+                    "location_abbr": "NYY",
+                    "stadium_name": "Yankee Stadium",
+                    "elevation": 54.0,
+                    "base_park_factor": 0.99
+                },
+                "11112": {
+                    "team_id": 11112,
+                    "name": "Los Angeles Dodgers",
+                    "location_abbr": "LAD",
+                    "stadium_name": "Dodger Stadium",
+                    "elevation": 270.0,
+                    "base_park_factor": 1.01
+                },
+                "11113": {
+                    "team_id": 11113,
+                    "name": "San Francisco Giants",
+                    "location_abbr": "SFG",
+                    "stadium_name": "Oracle Park",
+                    "elevation": 10.0,
+                    "base_park_factor": 0.96
+                }
+            };
+
+            const payload = teamPayloads[teamId];
+            if (!payload) return;
+
+            try {
+                // Also append current values in forms so user choices are preserved
+                payload.managerial_override = {
+                    "fatigue_threshold": parseInt(document.getElementById("fatigueThresholdInput").value),
+                    "clutch_weight": parseFloat(document.getElementById("clutchWeightInput").value),
+                    "defensive_sub_inning": parseInt(document.getElementById("defInningInput").value),
+                    "cold_bench_friction_tax": parseFloat(document.getElementById("frictionTaxInput").value)
+                };
+
+                payload.environmental_context = {
+                    "game_id": `GAME_${teamId}_2026`,
+                    "temperature": parseFloat(document.getElementById("tempInput").value),
+                    "humidity": parseFloat(document.getElementById("humidityInput").value),
+                    "wind_velocity": parseFloat(document.getElementById("windVelocityInput").value),
+                    "wind_direction": document.getElementById("windDirSelect").value
+                };
+
+                const res = await fetch("/api/v1/config/swap-context", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) throw new Error("Server context swap failed.");
+                
+                // Refresh configuration settings
+                await fetchConfig();
+
+            } catch (err) {
+                console.error("Error changing team: ", err);
+                alert("Error switching team: " + err.message);
+            }
+        }
+
+        // POST weather changes to backend database
+        async function updateEnvironment(event) {
+            event.preventDefault();
+            
+            const selectEl = document.getElementById("teamDropdown");
+            const teamId = parseInt(selectEl.value);
+            
+            const payload = {
+                "team_id": teamId,
+                "name": selectEl.options[selectEl.selectedIndex].text.split(" (")[0],
+                "location_abbr": selectEl.options[selectEl.selectedIndex].text.split("(")[1].slice(0,3),
+                "stadium_name": document.getElementById("lblStadiumName").innerText,
+                "elevation": parseFloat(document.getElementById("lblElevation").innerText.replace(/,/g, '')),
+                "base_park_factor": parseFloat(document.getElementById("lblParkFactor").innerText),
+                
+                "managerial_override": {
+                    "fatigue_threshold": parseInt(document.getElementById("fatigueThresholdInput").value),
+                    "clutch_weight": parseFloat(document.getElementById("clutchWeightInput").value),
+                    "defensive_sub_inning": parseInt(document.getElementById("defInningInput").value),
+                    "cold_bench_friction_tax": parseFloat(document.getElementById("frictionTaxInput").value)
+                },
+                "environmental_context": {
+                    "game_id": `GAME_${teamId}_2026`,
+                    "temperature": parseFloat(document.getElementById("tempInput").value),
+                    "humidity": parseFloat(document.getElementById("humidityInput").value),
+                    "wind_velocity": parseFloat(document.getElementById("windVelocityInput").value),
+                    "wind_direction": document.getElementById("windDirSelect").value
+                }
+            };
+
+            try {
+                const res = await fetch("/api/v1/config/swap-context", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) throw new Error("Failed to save environmental updates.");
+                
+                await fetchLineup();
+                alert("Live ballpark conditions successfully synchronized.");
+            } catch (err) {
+                console.error("Weather sync error:", err);
+                alert(err.message);
+            }
+        }
+
+        // POST managerial philosophy overrides to database
+        async function updateManagerial(event) {
+            event.preventDefault();
+            
+            const selectEl = document.getElementById("teamDropdown");
+            const teamId = parseInt(selectEl.value);
+            
+            const payload = {
+                "team_id": teamId,
+                "name": selectEl.options[selectEl.selectedIndex].text.split(" (")[0],
+                "location_abbr": selectEl.options[selectEl.selectedIndex].text.split("(")[1].slice(0,3),
+                "stadium_name": document.getElementById("lblStadiumName").innerText,
+                "elevation": parseFloat(document.getElementById("lblElevation").innerText.replace(/,/g, '')),
+                "base_park_factor": parseFloat(document.getElementById("lblParkFactor").innerText),
+                
+                "managerial_override": {
+                    "fatigue_threshold": parseInt(document.getElementById("fatigueThresholdInput").value),
+                    "clutch_weight": parseFloat(document.getElementById("clutchWeightInput").value),
+                    "defensive_sub_inning": parseInt(document.getElementById("defInningInput").value),
+                    "cold_bench_friction_tax": parseFloat(document.getElementById("frictionTaxInput").value)
+                },
+                "environmental_context": {
+                    "game_id": `GAME_${teamId}_2026`,
+                    "temperature": parseFloat(document.getElementById("tempInput").value),
+                    "humidity": parseFloat(document.getElementById("humidityInput").value),
+                    "wind_velocity": parseFloat(document.getElementById("windVelocityInput").value),
+                    "wind_direction": document.getElementById("windDirSelect").value
+                }
+            };
+
+            try {
+                const res = await fetch("/api/v1/config/swap-context", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) throw new Error("Failed to save coaching adjustments.");
+                
+                await fetchLineup();
+                alert("Managerial philosophy overrides successfully active.");
+            } catch (err) {
+                console.error("Override sync error:", err);
+                alert(err.message);
+            }
+        }
+
+        // GET optimized batting orders and build tables
+        async function fetchLineup() {
+            const hand = document.getElementById("pitcherHandSelect").value;
+            const leverage = document.getElementById("leverageSelect").value;
+
+            try {
+                const res = await fetch(`/api/v1/optimize/lineup?opposing_pitcher_handedness=${hand}&situational_leverage=${leverage}`);
+                if (!res.ok) throw new Error("Recalculation optimization service failed.");
+                const data = await res.json();
+
+                currentActiveRoster = data.optimized_lineup;
+
+                // Populate 1-9 table
+                const tbody = document.getElementById("lineupBody");
+                tbody.innerHTML = "";
+
+                data.optimized_lineup.forEach(p => {
+                    const row = document.createElement("tr");
+
+                    // Factor details
+                    const fatigueTax = p.factors.fatigue_tax;
+                    const ballpark = p.factors.ballpark_factor;
+                    const psych = p.factors.psych_modifier;
+                    const wind = p.factors.wind_bonus_slg;
+
+                    const fatigueClass = fatigueTax < 1.0 ? 'factor-red' : 'factor-neutral';
+                    const ballparkClass = ballpark > 1.0 ? 'factor-green' : (ballpark < 1.0 ? 'factor-red' : 'factor-neutral');
+                    const psychClass = psych > 1.0 ? 'factor-green' : (psych < 1.0 ? 'factor-red' : 'factor-neutral');
+                    const windClass = wind > 1.0 ? 'factor-green' : (wind < 1.0 ? 'factor-red' : 'factor-neutral');
+
+                    row.innerHTML = `
+                        <td><div class="order-badge">${p.batting_order}</div></td>
+                        <td style="font-weight: 600;">${p.name}</td>
+                        <td><span class="pos-badge">${p.position}</span></td>
+                        <td><span class="hand-badge">${p.batting_handedness}</span></td>
+                        <td class="ops-value">${p.base_ops.toFixed(3)}</td>
+                        <td class="ops-value ops-adjusted">${p.adjusted_ops.toFixed(3)}</td>
+                        <td>
+                            <span class="factor-tag ${fatigueClass}" title="Fatigue Mod: ${fatigueTax}">Fatigue ${fatigueTax >= 1.0 ? 'OK' : fatigueTax.toFixed(2)}</span>
+                            <span class="factor-tag ${psychClass}" title="Stress Mod: ${psych}">Stress ${psych.toFixed(2)}</span>
+                            <span class="factor-tag ${ballparkClass}" title="Ballpark Mod: ${ballpark}">Park ${ballpark.toFixed(3)}</span>
+                            <span class="factor-tag ${windClass}" title="Wind Mod: ${wind}">Wind ${wind.toFixed(2)}</span>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+                // Populate active batter selection in Tactical Sub Sandbox dropdown
+                const subDropdown = document.getElementById("subActiveBatter");
+                subDropdown.innerHTML = "";
+                data.optimized_lineup.forEach(p => {
+                    const opt = document.createElement("option");
+                    opt.value = p.player_id;
+                    opt.text = `${p.name} (${p.position}) - Base OPS: ${p.base_ops.toFixed(3)}`;
+                    subDropdown.appendChild(opt);
+                });
+
+            } catch (err) {
+                console.error("Optimization failed:", err);
+                document.getElementById("lineupBody").innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--accent); padding: 2rem;">Recalculation Error: ${err.message}</td></tr>`;
+            }
+        }
+
+        // POST Tactical pinching hitting parameters for simulation decision output
+        async function runTacticalSub(event) {
+            event.preventDefault();
+
+            const payload = {
+                "inning": parseInt(document.getElementById("subInning").value),
+                "half_inning": document.getElementById("subHalfInning").value,
+                "outs": parseInt(document.getElementById("subOuts").value),
+                "active_pitcher_handedness": document.getElementById("subPitcherHand").value,
+                "run_difference": parseInt(document.getElementById("subRunDifference").value),
+                "active_batter_id": parseInt(document.getElementById("subActiveBatter").value)
+            };
+
+            try {
+                const res = await fetch("/api/v1/optimize/tactical-sub", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) throw new Error("Sub evaluation service timed out or failed.");
+                const data = await res.json();
+
+                const resultCard = document.getElementById("subResultCard");
+                resultCard.innerHTML = "";
+
+                // Decide color banner classes
+                const bannerClass = data.decision === "INSERT_PINCH_HIT" ? "decision-insert" : "decision-hold";
+                const bannerText = data.decision === "INSERT_PINCH_HIT" ? "INSERT PINCH HITTER" : "HOLD (PATTERNS STAND)";
+                
+                // Estimate ops differential formatting
+                let compHtml = "";
+                if (data.proposed_sub_name) {
+                    const diff = data.proposed_sub_adjusted_ops_cold - data.active_player_adjusted_ops;
+                    const diffClass = diff >= 0 ? "ops-gain" : "ops-loss";
+                    const diffSign = diff >= 0 ? "+" : "";
+
+                    compHtml = `
+                        <div class="sub-comparison">
+                            <div class="comp-box">
+                                <p>Active Batter</p>
+                                <h3>${data.active_player_name}</h3>
+                                <div class="ops">${data.active_player_adjusted_ops.toFixed(3)}</div>
+                            </div>
+                            <div class="comp-box" style="border-color: var(--primary);">
+                                <p>Proposed Sub</p>
+                                <h3>${data.proposed_sub_name}</h3>
+                                <div class="ops">${data.proposed_sub_adjusted_ops_cold.toFixed(3)} <span style="font-size: 0.7rem; color: var(--text-muted);">(Cold)</span></div>
+                            </div>
+                            <div class="comp-box">
+                                <p>Net Advantage</p>
+                                <h3>OPS Shift</h3>
+                                <div class="ops ${diffClass}">${diffSign}${diff.toFixed(3)}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                resultCard.innerHTML = `
+                    <div class="decision-banner ${bannerClass}">${bannerText}</div>
+                    ${compHtml}
+                    <div class="reasoning-text">
+                        <strong>Mathematical Verdict:</strong><br>
+                        ${data.reasoning}
+                    </div>
+                `;
+
+            } catch (err) {
+                console.error("Sub evaluation failed:", err);
+                alert("Decision evaluation error: " + err.message);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,617 @@
+import os
+import logging
+from logging.handlers import RotatingFileHandler
+from fastapi import FastAPI, Depends, HTTPException, Query, status
+from fastapi.responses import HTMLResponse
+from sqlalchemy.orm import Session
+from typing import List
+
+from app.database import engine, Base, Team, EnvironmentalContext, ManagerialOverride, Player, SystemState, get_db
+from app.schemas import (
+    RuntimeConfigResponse,
+    TeamSwapPayload,
+    LineupOptimizationResponse,
+    OptimizedLineupPlayer,
+    TacticalSubRequest,
+    TacticalSubResponse,
+    ManagerialOverrideSchema,
+    EnvironmentalContextSchema
+)
+from app.scrapers import fetch_team_roster
+from app.calculator import calculate_true_projection
+
+# Setup logging directories and handlers
+LOGS_DIR = "/run/media/system/tallgeese/dev/baseball_optimizer/logs"
+if not os.path.exists(LOGS_DIR):
+    os.makedirs(LOGS_DIR)
+
+log_file_path = os.path.join(LOGS_DIR, "baseball_optimizer.log")
+
+# Setup rotating handler: max size 5MB, keep 3 backup logs
+rotating_handler = RotatingFileHandler(
+    log_file_path, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
+)
+rotating_handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - [%(levelname)s] - %(message)s')
+rotating_handler.setFormatter(formatter)
+
+# Configure root logger and add handlers
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+# Remove existing handlers to prevent double logs
+for handler in root_logger.handlers[:]:
+    root_logger.removeHandler(handler)
+root_logger.addHandler(rotating_handler)
+
+# Setup console output StreamHandler
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(formatter)
+root_logger.addHandler(console_handler)
+
+logger = logging.getLogger("baseball_optimizer")
+logger.info("Rotatable logging configured. Log file active at: logs/baseball_optimizer.log")
+
+app = FastAPI(
+    title="Human-Behavior-Aware Baseball Optimization API",
+    description="Enterprise-grade Sabermetric optimization API incorporating biological fatigue, ballpark factors, and psychological modifiers.",
+    version="1.0.0"
+)
+
+# Create Database tables on startup
+@app.on_event("startup")
+def startup_db_setup():
+    logger.info("Initializing database schema on startup...")
+    Base.metadata.create_all(bind=engine)
+    db = next(get_db())
+    try:
+        seed_default_data(db)
+    except Exception as e:
+        logger.error(f"Error seeding database on startup: {e}")
+    finally:
+        db.close()
+
+
+def seed_default_data(db: Session):
+    """
+    Seeds initial default data for both the Chicago Cubs and Boston Red Sox
+    so the optimizer is immediately functional on start.
+    """
+    # Check if teams already exist
+    if db.query(Team).count() > 0:
+        logger.info("Database tables verified. Context already seeded.")
+        return
+
+    logger.info("Database empty. Seeding initial tenants...")
+
+    # Seed Chicago Cubs (MLB Team ID: 112)
+    cubs = Team(
+        id=112,
+        name="Chicago Cubs",
+        location_abbr="CHC",
+        stadium_name="Wrigley Field",
+        elevation=600.0,
+        base_park_factor=1.03
+    )
+    db.add(cubs)
+    db.flush()
+
+    cubs_env = EnvironmentalContext(
+        game_id="2026_CHC_GAME_01",
+        team_id=112,
+        temperature=72.0,
+        humidity=45.0,
+        wind_velocity=14.0,
+        wind_direction="Out"  # Outward wind triggers wind vector bonus at Wrigley
+    )
+    db.add(cubs_env)
+
+    cubs_mgr = ManagerialOverride(
+        team_id=112,
+        fatigue_threshold=5,
+        clutch_weight=1.2,
+        defensive_sub_inning=7,
+        cold_bench_friction_tax=0.10
+    )
+    db.add(cubs_mgr)
+
+    # Ingest Cubs Roster
+    cubs_roster = fetch_team_roster("Chicago Cubs")
+    for p_data in cubs_roster:
+        player = Player(
+            id=p_data["id"],
+            name=p_data["name"],
+            team_id=112,
+            position=p_data["position"],
+            cumulative_days_played=p_data["cumulative_days_played"],
+            disrupted_sleep_hours=p_data["disrupted_sleep_hours"],
+            leverage_anxiety_modifier=p_data["leverage_anxiety_modifier"],
+            batting_handedness=p_data["batting_handedness"],
+            base_obp=p_data["base_obp"],
+            base_slg=p_data["base_slg"],
+            base_ops=p_data["base_ops"]
+        )
+        db.add(player)
+
+    # Seed Boston Red Sox (MLB Team ID: 111)
+    redsox = Team(
+        id=111,
+        name="Boston Red Sox",
+        location_abbr="BOS",
+        stadium_name="Fenway Park",
+        elevation=20.0,
+        base_park_factor=1.07
+    )
+    db.add(redsox)
+    db.flush()
+
+    redsox_env = EnvironmentalContext(
+        game_id="2026_BOS_GAME_01",
+        team_id=111,
+        temperature=64.0,
+        humidity=60.0,
+        wind_velocity=6.0,
+        wind_direction="Cross-Right"
+    )
+    db.add(redsox_env)
+
+    redsox_mgr = ManagerialOverride(
+        team_id=111,
+        fatigue_threshold=4,
+        clutch_weight=1.3,
+        defensive_sub_inning=7,
+        cold_bench_friction_tax=0.12
+    )
+    db.add(redsox_mgr)
+
+    # Ingest Red Sox Roster
+    redsox_roster = fetch_team_roster("Boston Red Sox")
+    for p_data in redsox_roster:
+        player = Player(
+            id=p_data["id"],
+            name=p_data["name"],
+            team_id=111,
+            position=p_data["position"],
+            cumulative_days_played=p_data["cumulative_days_played"],
+            disrupted_sleep_hours=p_data["disrupted_sleep_hours"],
+            leverage_anxiety_modifier=p_data["leverage_anxiety_modifier"],
+            batting_handedness=p_data["batting_handedness"],
+            base_obp=p_data["base_obp"],
+            base_slg=p_data["base_slg"],
+            base_ops=p_data["base_ops"]
+        )
+        db.add(player)
+
+    # Set Cubs as active team context initially
+    sys_state = SystemState(key="active_team_context", active_team_id=112)
+    db.add(sys_state)
+    
+    db.commit()
+    logger.info("Successfully seeded database with Cubs (active) and Red Sox context.")
+
+
+def get_active_team(db: Session) -> Team:
+    """Helper to fetch the current active team from system context."""
+    state = db.query(SystemState).filter(SystemState.key == "active_team_context").first()
+    if not state or not state.active_team_id:
+        # Fallback to first team if state is corrupt or empty
+        team = db.query(Team).first()
+        if not team:
+            raise HTTPException(status_code=404, detail="No teams loaded. Please swap context to initialize.")
+        return team
+    
+    team = db.query(Team).filter(Team.id == state.active_team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Active team context invalid.")
+    return team
+
+
+@app.get("/", response_class=HTMLResponse)
+def get_frontend():
+    """Serves the main interactive dashboard UI file."""
+    filepath = "/run/media/system/tallgeese/dev/baseball_optimizer/static/index.html"
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content)
+    except Exception as e:
+        logger.error(f"Error reading frontend index.html: {e}")
+        raise HTTPException(status_code=500, detail="Frontend HTML file not found or unreadable.")
+
+
+# --- Category I: System Configuration Control ---
+
+@app.get("/api/v1/config", response_model=RuntimeConfigResponse)
+def get_config(db: Session = Depends(get_db)):
+    """
+    Returns the currently loaded runtime environment parameters, active team scope, and managerial thresholds.
+    """
+    team = get_active_team(db)
+    
+    # Map to schema response
+    mgr_schema = None
+    if team.managerial_override:
+        mgr_schema = ManagerialOverrideSchema.model_validate(team.managerial_override)
+        
+    env_schema = None
+    if team.environmental_context:
+        env_schema = EnvironmentalContextSchema.model_validate(team.environmental_context)
+        
+    return RuntimeConfigResponse(
+        active_team_id=team.id,
+        active_team_name=team.name,
+        location_abbr=team.location_abbr,
+        stadium_name=team.stadium_name,
+        elevation=team.elevation,
+        base_park_factor=team.base_park_factor,
+        managerial_override=mgr_schema,
+        environmental_context=env_schema,
+        roster_size=len(team.players)
+    )
+
+
+@app.post("/api/v1/config/swap-context", response_model=RuntimeConfigResponse)
+def swap_context(payload: TeamSwapPayload, db: Session = Depends(get_db)):
+    """
+    Ingests a new team configuration payload. Instantly flips the entire runtime database scope, 
+    reloading or creating relevant rosters and stadium profiles.
+    """
+    logger.info(f"Swapping context request received for team ID {payload.team_id} ({payload.name})...")
+    
+    # 1. Update or create Team Registry
+    team = db.query(Team).filter(Team.id == payload.team_id).first()
+    if not team:
+        logger.info(f"Team ID {payload.team_id} does not exist. Creating new team '{payload.name}'.")
+        team = Team(id=payload.team_id)
+        db.add(team)
+    
+    team.name = payload.name
+    team.location_abbr = payload.location_abbr
+    team.stadium_name = payload.stadium_name
+    team.elevation = payload.elevation
+    team.base_park_factor = payload.base_park_factor
+
+    # 2. Update or create Managerial Logic Overrides
+    if payload.managerial_override:
+        mgr = db.query(ManagerialOverride).filter(ManagerialOverride.team_id == team.id).first()
+        if not mgr:
+            mgr = ManagerialOverride(team_id=team.id)
+            db.add(mgr)
+        mgr.fatigue_threshold = payload.managerial_override.fatigue_threshold
+        mgr.clutch_weight = payload.managerial_override.clutch_weight
+        mgr.defensive_sub_inning = payload.managerial_override.defensive_sub_inning
+        mgr.cold_bench_friction_tax = payload.managerial_override.cold_bench_friction_tax
+    else:
+        if not team.managerial_override:
+            mgr = ManagerialOverride(
+                team_id=team.id,
+                fatigue_threshold=5,
+                clutch_weight=1.0,
+                defensive_sub_inning=7,
+                cold_bench_friction_tax=0.15
+            )
+            db.add(mgr)
+
+    # 3. Update or create Environmental Context
+    if payload.environmental_context:
+        env = db.query(EnvironmentalContext).filter(EnvironmentalContext.team_id == team.id).first()
+        if not env:
+            env = EnvironmentalContext(game_id=payload.environmental_context.game_id, team_id=team.id)
+            db.add(env)
+        else:
+            env.game_id = payload.environmental_context.game_id
+        env.temperature = payload.environmental_context.temperature
+        env.humidity = payload.environmental_context.humidity
+        env.wind_velocity = payload.environmental_context.wind_velocity
+        env.wind_direction = payload.environmental_context.wind_direction
+    else:
+        if not team.environmental_context:
+            env = EnvironmentalContext(
+                game_id=f"GAME_{team.id}_01",
+                team_id=team.id,
+                temperature=70.0,
+                humidity=50.0,
+                wind_velocity=5.0,
+                wind_direction="Cross-Left"
+            )
+            db.add(env)
+
+    # Flush changes to database
+    db.flush()
+
+    # 4. Check roster size, if team has no players, fetch/sync roster
+    players_count = db.query(Player).filter(Player.team_id == team.id).count()
+    if players_count == 0:
+        logger.info(f"Team {team.name} has no players in local tables. Querying scrapers...")
+        roster_players = fetch_team_roster(team.name)
+        for p_data in roster_players:
+            player = Player(
+                id=p_data["id"],
+                name=p_data["name"],
+                team_id=team.id,
+                position=p_data["position"],
+                cumulative_days_played=p_data["cumulative_days_played"],
+                disrupted_sleep_hours=p_data["disrupted_sleep_hours"],
+                leverage_anxiety_modifier=p_data["leverage_anxiety_modifier"],
+                batting_handedness=p_data["batting_handedness"],
+                base_obp=p_data["base_obp"],
+                base_slg=p_data["base_slg"],
+                base_ops=p_data["base_ops"]
+            )
+            db.add(player)
+
+    # 5. Flip the runtime database scope active ID
+    state = db.query(SystemState).filter(SystemState.key == "active_team_context").first()
+    if not state:
+        state = SystemState(key="active_team_context", active_team_id=team.id)
+        db.add(state)
+    else:
+        state.active_team_id = team.id
+
+    db.commit()
+    db.refresh(team)
+    
+    # Reload mappings for response
+    mgr_schema = ManagerialOverrideSchema.model_validate(team.managerial_override)
+    env_schema = EnvironmentalContextSchema.model_validate(team.environmental_context)
+    
+    logger.info(f"Successfully flipped team context scope to: {team.name}")
+    
+    return RuntimeConfigResponse(
+        active_team_id=team.id,
+        active_team_name=team.name,
+        location_abbr=team.location_abbr,
+        stadium_name=team.stadium_name,
+        elevation=team.elevation,
+        base_park_factor=team.base_park_factor,
+        managerial_override=mgr_schema,
+        environmental_context=env_schema,
+        roster_size=len(team.players)
+    )
+
+
+# Helper function to apply Sabermetric Platoon splits
+def apply_platoon_splits(base_obp: float, base_slg: float, batter_hand: str, pitcher_hand: str) -> tuple:
+    """
+    Adjusts OBP and SLG baselines for batter/pitcher matchups.
+    - Opposite handedness (L vs R or R vs L) yields splits bonus (+0.02 OBP, +0.04 SLG)
+    - Same handedness (L vs L or R vs R) yields splits penalty (-0.01 OBP, -0.02 SLG)
+    - Switch hitters (S) yield minor bonus (+0.01 OBP, +0.02 SLG)
+    """
+    b_hand = batter_hand.upper()
+    p_hand = pitcher_hand.upper()
+    
+    if b_hand == "S":
+        return base_obp + 0.01, base_slg + 0.02
+    elif b_hand != p_hand:
+        return base_obp + 0.02, base_slg + 0.04
+    else:
+        return base_obp - 0.01, base_slg - 0.02
+
+
+# --- Category II: Tactical Roster Optimization ---
+
+@app.get("/api/v1/optimize/lineup", response_model=LineupOptimizationResponse)
+def optimize_lineup(
+    opposing_pitcher_handedness: str = Query("R", description="Opposing pitcher handedness: 'L' or 'R'"),
+    situational_leverage: str = Query("normal", description="Leverage situation: 'normal' or 'high'"),
+    db: Session = Depends(get_db)
+):
+    """
+    Ingests parameters for opposing pitcher handedness and situational leverage.
+    Returns a dynamically sorted, 1-through-9 batting order optimized by calculated score variations.
+    """
+    team = get_active_team(db)
+    
+    mgr = team.managerial_override
+    env = team.environmental_context
+    if not mgr or not env:
+        raise HTTPException(status_code=500, detail="Team configuration is missing environment or overrides.")
+        
+    players = team.players
+    if not players:
+        raise HTTPException(status_code=400, detail="Roster is empty. Please swap context to reset players.")
+
+    logger.info(f"Optimizing roster lineup for {team.name} against pitcher hand '{opposing_pitcher_handedness}' under leverage '{situational_leverage}'...")
+
+    scored_players = []
+    for player in players:
+        # Skip pitchers
+        if player.position.upper() == "P":
+            continue
+            
+        # 1. Apply Platoon splits to base metrics
+        obp_platoon, slg_platoon = apply_platoon_splits(
+            player.base_obp,
+            player.base_slg,
+            player.batting_handedness,
+            opposing_pitcher_handedness
+        )
+        
+        # 2. Run Core Prediction Calculations
+        factors = calculate_true_projection(
+            base_obp=obp_platoon,
+            base_slg=slg_platoon,
+            cumulative_days=player.cumulative_days_played,
+            fatigue_threshold=mgr.fatigue_threshold,
+            disrupted_sleep=player.disrupted_sleep_hours,
+            leverage_scenario=situational_leverage,
+            anxiety_modifier=player.leverage_anxiety_modifier,
+            clutch_weight=mgr.clutch_weight,
+            base_park_factor=team.base_park_factor,
+            elevation=team.elevation,
+            wind_direction=env.wind_direction,
+            wind_velocity=env.wind_velocity
+        )
+        
+        scored_players.append({
+            "player_id": player.id,
+            "name": player.name,
+            "position": player.position,
+            "batting_handedness": player.batting_handedness,
+            "base_ops": player.base_ops,
+            "adjusted_ops": factors["adjusted_ops"],
+            "adjusted_obp": factors["adjusted_obp"],
+            "adjusted_slg": factors["adjusted_slg"],
+            "factors": {
+                "fatigue_tax": factors["fatigue_tax"],
+                "psych_modifier": factors["psych_modifier"],
+                "ballpark_factor": factors["ballpark_factor"],
+                "wind_bonus_slg": factors["wind_bonus_slg"]
+            }
+        })
+        
+    # Sort players by adjusted OPS descending
+    scored_players.sort(key=lambda x: x["adjusted_ops"], reverse=True)
+    
+    # Select the top 9 players for the lineup
+    lineup_players = []
+    for idx, sp in enumerate(scored_players[:9], 1):
+        lineup_players.append(
+            OptimizedLineupPlayer(
+                batting_order=idx,
+                player_id=sp["player_id"],
+                name=sp["name"],
+                position=sp["position"],
+                batting_handedness=sp["batting_handedness"],
+                base_ops=sp["base_ops"],
+                adjusted_ops=sp["adjusted_ops"],
+                adjusted_obp=sp["adjusted_obp"],
+                adjusted_slg=sp["adjusted_slg"],
+                factors=sp["factors"]
+            )
+        )
+        
+    return LineupOptimizationResponse(
+        opposing_pitcher_handedness=opposing_pitcher_handedness,
+        situational_leverage=situational_leverage,
+        team_name=team.name,
+        optimized_lineup=lineup_players
+    )
+
+
+# --- Category III: Live-Game Decision Support ---
+
+@app.post("/api/v1/optimize/tactical-sub", response_model=TacticalSubResponse)
+def tactical_sub(payload: TacticalSubRequest, db: Session = Depends(get_db)):
+    """
+    Ingests live game state snapshot. Evaluates whether a player on the bench yields a higher 
+    performance probability than the active player after applying the 'cold-bench penalty' 
+    and weather modulations, returning a deterministic action instruction.
+    """
+    team = get_active_team(db)
+    mgr = team.managerial_override
+    env = team.environmental_context
+    if not mgr or not env:
+        raise HTTPException(status_code=500, detail="Team configuration is missing environment or overrides.")
+        
+    # Find active batter
+    active_batter = db.query(Player).filter(Player.id == payload.active_batter_id, Player.team_id == team.id).first()
+    if not active_batter:
+        raise HTTPException(status_code=404, detail=f"Active batter with ID {payload.active_batter_id} not found in roster.")
+        
+    logger.info(f"Tactical substitution evaluation requested for active batter: {active_batter.name} in Inning {payload.inning}...")
+
+    # 1. Calculate Active Batter's Adjusted performance (no cold-bench tax)
+    is_high_leverage = (payload.inning >= 7) and (abs(payload.run_difference) <= 2)
+    leverage_str = "high" if is_high_leverage else "normal"
+    
+    active_obp_pl, active_slg_pl = apply_platoon_splits(
+        active_batter.base_obp,
+        active_batter.base_slg,
+        active_batter.batting_handedness,
+        payload.active_pitcher_handedness
+    )
+    
+    active_proj = calculate_true_projection(
+        base_obp=active_obp_pl,
+        base_slg=active_slg_pl,
+        cumulative_days=active_batter.cumulative_days_played,
+        fatigue_threshold=mgr.fatigue_threshold,
+        disrupted_sleep=active_batter.disrupted_sleep_hours,
+        leverage_scenario=leverage_str,
+        anxiety_modifier=active_batter.leverage_anxiety_modifier,
+        clutch_weight=mgr.clutch_weight,
+        base_park_factor=team.base_park_factor,
+        elevation=team.elevation,
+        wind_direction=env.wind_direction,
+        wind_velocity=env.wind_velocity
+    )
+    
+    active_ops_final = active_proj["adjusted_ops"]
+    
+    # 2. Evaluate all players on the bench (players other than active batter and not pitcher)
+    bench_candidates = db.query(Player).filter(
+        Player.team_id == team.id,
+        Player.id != active_batter.id,
+        Player.position != "P"
+    ).all()
+    
+    best_sub = None
+    best_sub_ops_cold = -1.0
+    
+    for candidate in bench_candidates:
+        cand_obp_pl, cand_slg_pl = apply_platoon_splits(
+            candidate.base_obp,
+            candidate.base_slg,
+            candidate.batting_handedness,
+            payload.active_pitcher_handedness
+        )
+        
+        cand_proj = calculate_true_projection(
+            base_obp=cand_obp_pl,
+            base_slg=cand_slg_pl,
+            cumulative_days=candidate.cumulative_days_played,
+            fatigue_threshold=mgr.fatigue_threshold,
+            disrupted_sleep=candidate.disrupted_sleep_hours,
+            leverage_scenario=leverage_str,
+            anxiety_modifier=candidate.leverage_anxiety_modifier,
+            clutch_weight=mgr.clutch_weight,
+            base_park_factor=team.base_park_factor,
+            elevation=team.elevation,
+            wind_direction=env.wind_direction,
+            wind_velocity=env.wind_velocity
+        )
+        
+        # Apply Cold-Bench Friction Tax
+        cold_ops = cand_proj["adjusted_ops"] * (1.0 - mgr.cold_bench_friction_tax)
+        
+        if cold_ops > best_sub_ops_cold:
+            best_sub_ops_cold = cold_ops
+            best_sub = candidate
+            
+    # 3. Decision Logic
+    is_substitution_window = payload.inning >= mgr.defensive_sub_inning
+    ops_advantage = best_sub_ops_cold - active_ops_final
+    
+    decision = "HOLD"
+    reasoning = (
+        f"Active batter {active_batter.name} has adjusted OPS of {active_ops_final:.3f} under leverage scenario '{leverage_str}'. "
+        f"Best bench candidate {best_sub.name if best_sub else 'N/A'} has cold-bench-adjusted OPS of {best_sub_ops_cold:.3f} "
+        f"(friction tax of {mgr.cold_bench_friction_tax*100:.1f}% applied). "
+    )
+    
+    if best_sub and ops_advantage >= 0.020 and is_substitution_window:
+        decision = "INSERT_PINCH_HIT"
+        reasoning += (
+            f"Tactical substitution recommended: {best_sub.name} provides a significant Sabermetric advantage "
+            f"(+{ops_advantage:.3f} OPS) in the {payload.half_inning} of Inning {payload.inning}."
+        )
+        logger.info(f"Decision: INSERT_PINCH_HIT. Sub: {best_sub.name} (+{ops_advantage:.3f} OPS).")
+    else:
+        if not is_substitution_window:
+            reasoning += f"Substitution held because current Inning {payload.inning} is before team threshold (Inning {mgr.defensive_sub_inning})."
+        elif ops_advantage < 0.020:
+            reasoning += f"Substitution held because advantage (+{ops_advantage:.3f} OPS) does not exceed significance threshold (0.020 OPS)."
+        logger.info(f"Decision: HOLD.")
+            
+    return TacticalSubResponse(
+        decision=decision,
+        active_player_name=active_batter.name,
+        active_player_adjusted_ops=round(active_ops_final, 3),
+        proposed_sub_id=best_sub.id if best_sub else None,
+        proposed_sub_name=best_sub.name if best_sub else None,
+        proposed_sub_adjusted_ops_cold=round(best_sub_ops_cold, 3) if best_sub else None,
+        cold_bench_friction_tax_applied=mgr.cold_bench_friction_tax,
+        reasoning=reasoning
+    )

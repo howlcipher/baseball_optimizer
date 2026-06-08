@@ -1,5 +1,7 @@
 # Human-Behavior-Aware Baseball Optimizer API & Thematic Dashboard
 
+![Dashboard Preview](static/dashboard_preview.png)
+
 This is a production-grade, human-behavior-aware baseball optimization service. It integrates traditional Sabermetric baselines (OBP, SLG, OPS) with active, real-time **Human Behavioral Factors** (biological fatigue, loss of sleep, stress/anxiety baselines) and **Ballpark Environment Physics** (wind vector velocity, wind direction, stadium elevation) to output optimal lineups, tactical substitution choices, bullpen recommendations, steal probabilities, and defensive shifts on-the-fly.
 
 ---
@@ -20,7 +22,8 @@ baseball_optimizer/
 │   └── scrapers.py         # Stats crawler wrapper compatible with pybaseball
 │
 ├── static/
-│   └── index.html          # Dynamic, themed HTML/CSS/JS frontend served via "/"
+│   ├── index.html          # Dynamic, themed HTML/CSS/JS frontend served via "/"
+│   └── dashboard_preview.png # Visual mockup of the dashboard in action
 │
 ├── tests/
 │   ├── verify.py           # Programmatic ASGI baseline integration test suite

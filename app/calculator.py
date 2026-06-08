@@ -61,6 +61,41 @@ def calculate_ballpark_factor(base_park_factor: float, elevation: float) -> floa
     return base_park_factor + elevation_bonus
 
 
+def get_position_swap_penalty(player_pos: str, assigned_pos: str) -> tuple[float, float]:
+    """
+    Calculates defensive adaptation toll when playing out of position.
+    Returns (obp_penalty, slg_penalty).
+    """
+    p_pos = player_pos.upper().strip()
+    a_pos = assigned_pos.upper().strip()
+    
+    if p_pos == a_pos or (p_pos == "DH" and a_pos == "DH"):
+        return 0.0, 0.0
+        
+    if a_pos == "DH":
+        # DH transition has minor friction
+        return 0.005, 0.010
+        
+    # Categories
+    inf = {"1B", "2B", "3B", "SS", "IF"}
+    out = {"LF", "CF", "RF", "OF"}
+    
+    # Check similar groups
+    if p_pos in inf and a_pos in inf:
+        if a_pos == "1B":
+            return 0.005, 0.010
+        return 0.015, 0.025
+        
+    if p_pos in out and a_pos in out:
+        return 0.010, 0.015
+        
+    if p_pos == "C" or a_pos == "C":
+        return 0.030, 0.050  # extreme specialized catching penalty
+        
+    # Out of group (infield to outfield etc)
+    return 0.025, 0.040
+
+
 def calculate_advanced_matchup_factors(
     typical_swing_angle: float,
     bat_swing_speed: float,
@@ -85,7 +120,11 @@ def calculate_advanced_matchup_factors(
     runner_on_2b: bool,
     runner_on_3b: bool,
     pitch_count_in_at_bat: int,
-    inning: int
+    inning: int,
+    natural_choke_up: int = None,
+    natural_stand_in_box: str = None,
+    pitcher_natural_arm_angle: str = "Three-Quarters",
+    pitcher_natural_rubber_position: str = "Middle"
 ) -> dict:
     """
     Calculates advanced biomechanical, physical, and situational matchup modifiers.
@@ -97,6 +136,37 @@ def calculate_advanced_matchup_factors(
     is_low = "low" in loc
     is_high = "high" in loc
     
+    # 0. Pitcher Delivery Slot Control Tolls
+    pitcher_control_toll_obp = 0.0
+    command_mult = 1.0
+    adjusted_velocity = pitcher_velocity
+    
+    pitcher_arm_slot_toll_applied = False
+    pitcher_rubber_toll_applied = False
+    
+    p_arm = pitcher_arm_angle.strip().lower()
+    p_nat_arm = pitcher_natural_arm_angle.strip().lower()
+    # Support 'three-quarters' vs 'three quarters' equivalence
+    if p_arm == "three quarters":
+        p_arm = "three-quarters"
+    if p_nat_arm == "three quarters":
+        p_nat_arm = "three-quarters"
+        
+    if p_arm != p_nat_arm:
+        command_mult *= 0.85
+        adjusted_velocity -= 3.0  # control/velocity loss from non-standard arm slot
+        pitcher_control_toll_obp += 0.020  # walks boost for batter
+        pitcher_arm_slot_toll_applied = True
+        
+    p_rubber = pitcher_rubber_position.strip().lower()
+    p_nat_rubber = pitcher_natural_rubber_position.strip().lower()
+    if p_rubber != p_nat_rubber:
+        command_mult *= 0.95
+        pitcher_control_toll_obp += 0.008  # minor control loss from plate edge
+        pitcher_rubber_toll_applied = True
+        
+    effective_command = pitcher_command * command_mult
+
     # 1. Pitch Location & Swing Angle matching
     if typical_swing_angle > 20.0:  # Flyball/Upper-cut hitter
         if is_low:
@@ -139,7 +209,7 @@ def calculate_advanced_matchup_factors(
                 angle_slg_mod += 0.03
 
     # 3. Bat Size/Weight vs Pitch Velocity Collision Physics
-    velocity_diff = pitcher_velocity - 92.0
+    velocity_diff = adjusted_velocity - 92.0
     inertia_obp_mod = 1.0
     inertia_slg_mod = 1.0
     
@@ -229,7 +299,7 @@ def calculate_advanced_matchup_factors(
     runners_obp_mod = 0.0
     if has_risp:
         runners_obp_mod += runners_on_base_modifier
-        if pitcher_command < 0.6:
+        if effective_command < 0.6:
             runners_obp_mod += 0.01
 
     # 9. Game & At-Bat Progression
@@ -238,10 +308,28 @@ def calculate_advanced_matchup_factors(
     familiarity_bonus = min(0.06, 0.015 * max(0, inning - 1))
     at_bat_tracking_bonus = at_bat_progression_decay * min(8, pitch_count_in_at_bat)
 
-    mult_obp = location_obp_mod * inertia_obp_mod * choke_obp_mod * box_obp_mod * windup_timing_mod * pitch_sel_obp_mod * game_fatigue
-    mult_slg = location_slg_mod * inertia_slg_mod * choke_slg_mod * box_slg_mod * pitch_sel_slg_mod * game_fatigue
+    # 10. Batter Stance & Grip Adaptation Tolls (Friction penalty)
+    batter_adaptation_obp_mult = 1.0
+    batter_adaptation_slg_mult = 1.0
+    batter_stance_toll_applied = False
+    batter_grip_toll_applied = False
     
-    add_obp = angle_obp_mod + runners_obp_mod + familiarity_bonus + at_bat_tracking_bonus
+    if natural_choke_up is not None and choke_up != natural_choke_up:
+        # Grip override toll: timing adaptation friction
+        batter_adaptation_obp_mult *= 0.98
+        batter_adaptation_slg_mult *= 0.95
+        batter_grip_toll_applied = True
+        
+    if natural_stand_in_box is not None and stand_in_box.strip().lower() != natural_stand_in_box.strip().lower():
+        # Stance override toll: alignment adaptation friction
+        batter_adaptation_obp_mult *= 0.96
+        batter_adaptation_slg_mult *= 0.92
+        batter_stance_toll_applied = True
+
+    mult_obp = location_obp_mod * inertia_obp_mod * choke_obp_mod * box_obp_mod * windup_timing_mod * pitch_sel_obp_mod * game_fatigue * batter_adaptation_obp_mult
+    mult_slg = location_slg_mod * inertia_slg_mod * choke_slg_mod * box_slg_mod * pitch_sel_slg_mod * game_fatigue * batter_adaptation_slg_mult
+    
+    add_obp = angle_obp_mod + runners_obp_mod + familiarity_bonus + at_bat_tracking_bonus + pitcher_control_toll_obp
     add_slg = angle_slg_mod + familiarity_bonus
     
     return {
@@ -266,7 +354,14 @@ def calculate_advanced_matchup_factors(
             "runners_obp_mod": round(runners_obp_mod, 3),
             "game_fatigue": round(game_fatigue, 3),
             "familiarity_bonus": round(familiarity_bonus, 3),
-            "at_bat_tracking_bonus": round(at_bat_tracking_bonus, 3)
+            "at_bat_tracking_bonus": round(at_bat_tracking_bonus, 3),
+            "pitcher_control_toll_obp": round(pitcher_control_toll_obp, 3),
+            "batter_adaptation_obp_mult": round(batter_adaptation_obp_mult, 3),
+            "batter_adaptation_slg_mult": round(batter_adaptation_slg_mult, 3),
+            "pitcher_arm_slot_toll_applied": pitcher_arm_slot_toll_applied,
+            "pitcher_rubber_toll_applied": pitcher_rubber_toll_applied,
+            "batter_stance_toll_applied": batter_stance_toll_applied,
+            "batter_grip_toll_applied": batter_grip_toll_applied
         }
     }
 
@@ -313,7 +408,15 @@ def calculate_true_projection(
     pitch_count_in_at_bat: int = 0,
     inning: int = 1,
     batter_handedness: str = "R",
-    pitcher_handedness: str = "R"
+    pitcher_handedness: str = "R",
+    
+    # Natural batter traits (to identify overrides/tolls)
+    natural_choke_up: int = None,
+    natural_stand_in_box: str = None,
+    
+    # Natural pitcher traits (to identify overrides/tolls)
+    pitcher_natural_arm_angle: str = "Three-Quarters",
+    pitcher_natural_rubber_position: str = "Middle"
 ) -> dict:
     """
     Calculates the adjusted OBP, SLG, and OPS utilizing a multi-layered biophysical equation.
@@ -328,7 +431,7 @@ def calculate_true_projection(
     ballpark_factor = calculate_ballpark_factor(base_park_factor, elevation)
     
     # 4. Wind Vector Logic (Slugging specific)
-    wind_bonus = calculate_wind_vector_bonus(wind_direction, wind_velocity)
+    wind_bonus = wind_bonus = calculate_wind_vector_bonus(wind_direction, wind_velocity)
     
     # 5. Advanced Matchup Factors
     adv = calculate_advanced_matchup_factors(
@@ -355,7 +458,11 @@ def calculate_true_projection(
         runner_on_2b=runner_on_2b,
         runner_on_3b=runner_on_3b,
         pitch_count_in_at_bat=pitch_count_in_at_bat,
-        inning=inning
+        inning=inning,
+        natural_choke_up=natural_choke_up if natural_choke_up is not None else choke_up,
+        natural_stand_in_box=natural_stand_in_box if natural_stand_in_box is not None else stand_in_box,
+        pitcher_natural_arm_angle=pitcher_natural_arm_angle,
+        pitcher_natural_rubber_position=pitcher_natural_rubber_position
     )
     
     # Compute adjusted OBP

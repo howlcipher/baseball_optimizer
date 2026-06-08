@@ -79,6 +79,7 @@ class OptimizedLineupPlayer(BaseModel):
     player_id: int
     name: str
     position: str
+    assigned_position: str
     batting_handedness: str
     base_ops: float
     adjusted_ops: float
@@ -91,6 +92,8 @@ class OptimizedLineupPlayer(BaseModel):
     bat_size: float
     bat_weight: float
     stand_in_box: str
+    optimized_stance: Optional[str] = None
+    optimized_choke_up: Optional[int] = None
 
 
 class LineupOptimizationResponse(BaseModel):
@@ -111,6 +114,8 @@ class TacticalSubRequest(BaseModel):
     # Additional Simulation Parameters
     pitcher_arm_angle: str = Field("Three-Quarters", description="Pitcher release angle: 'Overhand', 'Three-Quarters', 'Sidearm', 'Submarine'")
     pitcher_rubber_position: str = Field("Middle", description="Rubber stance: 'First Base Side', 'Third Base Side', 'Middle'")
+    pitcher_natural_arm_angle: Optional[str] = Field("Three-Quarters", description="Pitcher natural release angle")
+    pitcher_natural_rubber_position: Optional[str] = Field("Middle", description="Pitcher natural rubber stance")
     pitcher_velocity: float = Field(93.0, description="Fastball velocity in mph")
     pitcher_command: float = Field(0.5, description="Pitcher command rating (0.0 to 1.0)")
     pitcher_movement: float = Field(0.5, description="Pitcher movement rating (0.0 to 1.0)")

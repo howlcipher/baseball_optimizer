@@ -100,8 +100,36 @@ def main():
         assert heavy_player_slow['adjusted_ops'] != heavy_player_fast['adjusted_ops'], "Heavy bat hitter should perform differently against slow and fast pitchers"
         print("SUCCESS: Bat inertial mismatch mechanics verified.")
 
-        # Test 3: Sandbox overrides (Stance and Choke Up)
-        print("\nTest 3: Tactical Sub Sandbox Overrides")
+        # Test 3: Pitcher natural arm angle override toll
+        print("\nTest 3: Pitcher natural arm angle override toll")
+        url_non_natural = "http://127.0.0.1:8080/api/v1/optimize/lineup?opposing_pitcher_handedness=R&opposing_pitcher_arm_angle=Sidearm&opposing_pitcher_natural_arm_angle=Three-Quarters"
+        url_natural = "http://127.0.0.1:8080/api/v1/optimize/lineup?opposing_pitcher_handedness=R&opposing_pitcher_arm_angle=Sidearm&opposing_pitcher_natural_arm_angle=Sidearm"
+        
+        with urllib.request.urlopen(url_non_natural) as res:
+            non_nat_lineup = json.loads(res.read().decode())
+        with urllib.request.urlopen(url_natural) as res:
+            nat_lineup = json.loads(res.read().decode())
+            
+        p_non_nat = non_nat_lineup['optimized_lineup'][0]
+        p_nat = next(p for p in nat_lineup['optimized_lineup'] if p['player_id'] == p_non_nat['player_id'])
+        
+        print(f"Player {p_non_nat['name']} vs Sidearm (Natural=Three-Quarters) Adj OPS: {p_non_nat['adjusted_ops']:.3f} (Arm slot toll applied: {p_non_nat['factors']['pitcher_arm_slot_toll_applied']})")
+        print(f"Player {p_nat['name']} vs Sidearm (Natural=Sidearm) Adj OPS: {p_nat['adjusted_ops']:.3f} (Arm slot toll applied: {p_nat['factors']['pitcher_arm_slot_toll_applied']})")
+        
+        assert p_non_nat['factors']['pitcher_arm_slot_toll_applied'] is True, "Toll should be applied when arm slots differ"
+        assert p_nat['factors']['pitcher_arm_slot_toll_applied'] is False, "Toll should not be applied when arm slots match"
+        print("SUCCESS: Pitcher natural arm angle override toll verified.")
+        
+        # Test 4: Batter stance and grip auto-optimization in lineup
+        print("\nTest 4: Batter stance/grip auto-optimization in lineup")
+        assert 'optimized_stance' in p_non_nat, "Lineup player must return optimized_stance"
+        assert 'optimized_choke_up' in p_non_nat, "Lineup player must return optimized_choke_up"
+        print(f"Player {p_non_nat['name']} Natural Stance: {p_non_nat['stand_in_box']} | Grip: {p_non_nat['choke_up']}")
+        print(f"Player {p_non_nat['name']} Optimized Stance: {p_non_nat['optimized_stance']} | Grip: {p_non_nat['optimized_choke_up']}")
+        print("SUCCESS: Batter stance/grip auto-optimization verified.")
+        
+        # Test 5: Sandbox overrides (Stance and Choke Up)
+        print("\nTest 5: Tactical Sub Sandbox Overrides")
         active_batter_id = overhand_data['optimized_lineup'][0]['player_id']
         active_batter_name = overhand_data['optimized_lineup'][0]['name']
         

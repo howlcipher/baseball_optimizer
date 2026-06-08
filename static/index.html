@@ -679,7 +679,17 @@
                             </select>
                         </div>
                         <div class="input-group">
-                            <label for="pitcherArmSelect">Arm Angle</label>
+                            <label for="pitcherLocationSelect">Target Location</label>
+                            <select id="pitcherLocationSelect" onchange="fetchLineup()">
+                                <option value="Low-Outside" selected>Low-Outside</option>
+                                <option value="High-Inside">High-Inside</option>
+                                <option value="Low-Inside">Low-Inside</option>
+                                <option value="High-Outside">High-Outside</option>
+                                <option value="Down-Middle">Down-Middle</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label for="pitcherArmSelect">Arm Angle (Active)</label>
                             <select id="pitcherArmSelect" onchange="fetchLineup()">
                                 <option value="Three-Quarters" selected>Three-Quarters</option>
                                 <option value="Overhand">Overhand</option>
@@ -688,7 +698,16 @@
                             </select>
                         </div>
                         <div class="input-group">
-                            <label for="pitcherRubberSelect">Rubber Position</label>
+                            <label for="pitcherNaturalArmSelect">Natural Arm Angle</label>
+                            <select id="pitcherNaturalArmSelect" onchange="fetchLineup()">
+                                <option value="Three-Quarters" selected>Three-Quarters</option>
+                                <option value="Overhand">Overhand</option>
+                                <option value="Sidearm">Sidearm</option>
+                                <option value="Submarine">Submarine</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label for="pitcherRubberSelect">Rubber Position (Active)</label>
                             <select id="pitcherRubberSelect" onchange="fetchLineup()">
                                 <option value="Middle" selected>Middle</option>
                                 <option value="First Base Side">First Base Side</option>
@@ -696,13 +715,11 @@
                             </select>
                         </div>
                         <div class="input-group">
-                            <label for="pitcherLocationSelect">Target Location</label>
-                            <select id="pitcherLocationSelect" onchange="fetchLineup()">
-                                <option value="Low-Outside" selected>Low-Outside</option>
-                                <option value="High-Inside">High-Inside</option>
-                                <option value="Low-Inside">Low-Inside</option>
-                                <option value="High-Outside">High-Outside</option>
-                                <option value="Down-Middle">Down-Middle</option>
+                            <label for="pitcherNaturalRubberSelect">Natural Rubber Position</label>
+                            <select id="pitcherNaturalRubberSelect" onchange="fetchLineup()">
+                                <option value="Middle" selected>Middle</option>
+                                <option value="First Base Side">First Base Side</option>
+                                <option value="Third Base Side">Third Base Side</option>
                             </select>
                         </div>
                         <div class="input-group full-width">
@@ -1353,6 +1370,8 @@
             const hand = document.getElementById("pitcherHandSelect").value;
             const armAngle = document.getElementById("pitcherArmSelect").value;
             const rubber = document.getElementById("pitcherRubberSelect").value;
+            const natArm = document.getElementById("pitcherNaturalArmSelect").value;
+            const natRubber = document.getElementById("pitcherNaturalRubberSelect").value;
             const velocity = document.getElementById("pitcherVelocityInput").value;
             const command = document.getElementById("pitcherCommandInput").value;
             const movement = document.getElementById("pitcherMovementInput").value;
@@ -1372,6 +1391,8 @@
                     situational_leverage: leverage,
                     opposing_pitcher_arm_angle: armAngle,
                     opposing_pitcher_rubber_position: rubber,
+                    opposing_pitcher_natural_arm_angle: natArm,
+                    opposing_pitcher_natural_rubber_position: natRubber,
                     opposing_pitcher_velocity: velocity,
                     opposing_pitcher_command: command,
                     opposing_pitcher_movement: movement,
@@ -1404,15 +1425,42 @@
                     const psychClass = psych > 1.0 ? 'factor-green' : (psych < 1.0 ? 'factor-red' : 'factor-neutral');
                     const windClass = wind > 1.0 ? 'factor-green' : (wind < 1.0 ? 'factor-red' : 'factor-neutral');
 
+                    const isOutOfPosition = p.position !== p.assigned_position;
+                    const posHtml = isOutOfPosition 
+                        ? `<span class="pos-badge" style="background: linear-gradient(135deg, var(--accent), #e53e3e); border-color: rgba(255,255,255,0.25);" title="Primary Position: ${p.position}">${p.assigned_position}</span>`
+                        : `<span class="pos-badge">${p.position}</span>`;
+
+                    const posSwapOpsPenalty = (p.factors.position_swap_obp_penalty || 0.0) + (p.factors.position_swap_slg_penalty || 0.0);
+                    const posSwapHtml = posSwapOpsPenalty > 0
+                        ? `<span class="factor-tag factor-red" title="Position Shift Toll: -${posSwapOpsPenalty.toFixed(3)} OPS">Shift Toll -${posSwapOpsPenalty.toFixed(3)}</span>`
+                        : '';
+
+                    // Batter stance overrides representation
+                    const stanceShifted = p.stand_in_box !== p.optimized_stance;
+                    const gripShifted = p.choke_up !== p.optimized_choke_up;
+                    const approachText = (stanceShifted || gripShifted)
+                        ? `<span style="color: var(--accent); font-weight: 600;">➔ Override Opt: ${p.optimized_stance}${p.optimized_choke_up === 1 ? ' (Choked)' : ' (Normal)'}</span>`
+                        : `<span style="color: var(--primary); font-weight: 500;">(Natural Stance/Grip)</span>`;
+
+                    // Adaptation tolls
+                    const pArmToll = p.factors.pitcher_arm_slot_toll_applied 
+                        ? `<span class="factor-tag factor-red" title="Pitcher Arm Slot Override Toll: -3mph Velocity, -15% Command">P-Arm Toll</span>` : '';
+                    const pRubberToll = p.factors.pitcher_rubber_toll_applied
+                        ? `<span class="factor-tag factor-red" title="Pitcher Rubber Override Toll: -5% Command">P-Rub Toll</span>` : '';
+                    const bStanceToll = p.factors.batter_stance_toll_applied
+                        ? `<span class="factor-tag factor-red" title="Stance Override Toll: -4% OBP, -8% SLG">Stance Toll</span>` : '';
+                    const bGripToll = p.factors.batter_grip_toll_applied
+                        ? `<span class="factor-tag factor-red" title="Grip Override Toll: -2% OBP, -5% SLG">Grip Toll</span>` : '';
+
                     row.innerHTML = `
                         <td><div class="order-badge">${p.batting_order}</div></td>
                         <td style="font-weight: 600;">
                             <div>${p.name}</div>
                             <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: normal; margin-top: 0.15rem;">
-                                Swing: ${p.typical_swing_angle}° | Speed: ${p.bat_swing_speed}mph | Bat: ${p.bat_size}"/${p.bat_weight}oz | Stance: ${p.stand_in_box}
+                                Swing: ${p.typical_swing_angle}° | Speed: ${p.bat_swing_speed}mph | Bat: ${p.bat_size}"/${p.bat_weight}oz | Stance: ${p.stand_in_box} &nbsp; ${approachText}
                             </div>
                         </td>
-                        <td><span class="pos-badge">${p.position}</span></td>
+                        <td>${posHtml}</td>
                         <td><span class="hand-badge">${p.batting_handedness}</span></td>
                         <td class="ops-value">${p.base_ops.toFixed(3)}</td>
                         <td class="ops-value ops-adjusted">${p.adjusted_ops.toFixed(3)}</td>
@@ -1421,6 +1469,11 @@
                             <span class="factor-tag ${psychClass}" title="Stress Mod: ${psych}">Stress ${psych.toFixed(2)}</span>
                             <span class="factor-tag ${ballparkClass}" title="Ballpark Mod: ${ballpark}">Park ${ballpark.toFixed(3)}</span>
                             <span class="factor-tag ${windClass}" title="Wind Mod: ${wind}">Wind ${wind.toFixed(2)}</span>
+                            ${posSwapHtml}
+                            ${pArmToll}
+                            ${pRubberToll}
+                            ${bStanceToll}
+                            ${bGripToll}
                         </td>
                     `;
                     tbody.appendChild(row);
@@ -1456,6 +1509,8 @@
             const hand = document.getElementById("pitcherHandSelect").value;
             const armAngle = document.getElementById("pitcherArmSelect").value;
             const rubber = document.getElementById("pitcherRubberSelect").value;
+            const natArm = document.getElementById("pitcherNaturalArmSelect").value;
+            const natRubber = document.getElementById("pitcherNaturalRubberSelect").value;
             const velocity = parseFloat(document.getElementById("pitcherVelocityInput").value);
             const command = parseFloat(document.getElementById("pitcherCommandInput").value);
             const movement = parseFloat(document.getElementById("pitcherMovementInput").value);
@@ -1481,6 +1536,8 @@
                 "pitch_count_in_at_bat": parseInt(document.getElementById("subPitchCount").value),
                 "pitcher_arm_angle": armAngle,
                 "pitcher_rubber_position": rubber,
+                "pitcher_natural_arm_angle": natArm,
+                "pitcher_natural_rubber_position": natRubber,
                 "pitcher_velocity": velocity,
                 "pitcher_command": command,
                 "pitcher_movement": movement,

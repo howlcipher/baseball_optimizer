@@ -486,3 +486,123 @@ def calculate_true_projection(
         "wind_bonus_slg": round(wind_bonus, 3),
         **adv["details"]
     }
+
+
+def calculate_steal_probability(
+    runner_sprint_speed: float,
+    runner_steal_aggression: float,
+    pitcher_velocity: float,
+    pitcher_windup_efficiency: float,
+    catcher_pop_time: float,
+    target_base: int = 2
+) -> dict:
+    """
+    Calculates the steal success probability using biomechanical sprint times vs.
+    defensive release/throw timing models.
+    """
+    import math
+    
+    # 1. Estimate Runner's Base running travel time (dist 90ft with lead offset)
+    # Average runner speed is 27 ft/s. Distance to second is 90ft, but lead-off is ~12-15ft.
+    # So they run 75-78ft. Reacting takes ~0.3s. Acceleration curve takes time.
+    # T_run model: base run time at 27fps is ~3.25 seconds.
+    base_t_run = 3.8 - (runner_sprint_speed - 23.0) * 0.12 - (runner_steal_aggression * 0.15)
+    
+    # Stealing third is harder due to shorter catcher pop throw angle
+    if target_base == 3:
+        base_t_run += 0.25
+        
+    # 2. Estimate Defensive reaction and throw time
+    # Pitcher delivery (slide step is around 1.15-1.30s, standard is 1.35-1.6s)
+    # Higher velocity slightly reduces pop time/reaction window
+    pitch_time = 1.70 - (pitcher_windup_efficiency * 0.45) - ((pitcher_velocity - 90.0) * 0.012)
+    pitch_time = max(1.10, pitch_time)
+    
+    defense_time = pitch_time + catcher_pop_time
+    
+    # 3. Calculate probability using logistic sigmoid
+    time_diff = defense_time - base_t_run
+    
+    success_probability = 1.0 / (1.0 + math.exp(-6.5 * (time_diff - 0.04)))
+    success_probability = max(0.02, min(0.98, success_probability))
+    
+    recommendation = "STEAL" if success_probability >= 0.70 else "HOLD"
+    
+    reasoning = (
+        f"Runner sprint speed of {runner_sprint_speed:.1f} ft/s yields an estimated run duration of {base_t_run:.2f}s (base {target_base} attempt). "
+        f"Defensive response timing is estimated at {defense_time:.2f}s (pitcher delivery of {pitch_time:.2f}s + catcher pop time of {catcher_pop_time:.2f}s). "
+    )
+    if recommendation == "STEAL":
+        reasoning += f"Steal recommended with a strong {success_probability*100:.1f}% safety margin."
+    else:
+        reasoning += f"Hold recommended. The defensive clock advantage leaves only a {success_probability*100:.1f}% chance of success."
+        
+    return {
+        "success_probability": round(success_probability, 3),
+        "recommendation": recommendation,
+        "reasoning": reasoning,
+        "details": {
+            "estimated_run_time": round(base_t_run, 3),
+            "estimated_pitch_delivery_time": round(pitch_time, 3),
+            "estimated_total_defense_time": round(defense_time, 3),
+            "time_margin": round(time_diff, 3)
+        }
+    }
+
+
+def calculate_defensive_shift_alignment(
+    typical_swing_angle: float,
+    batting_handedness: str,
+    pitcher_velocity: float,
+    runners_on_base: bool = False
+) -> dict:
+    """
+    Determines the optimal defensive positioning shift configuration against a batter.
+    """
+    swing = typical_swing_angle
+    hand = batting_handedness.upper()
+    vel = pitcher_velocity
+    
+    alignment = "Standard"
+    reasoning = ""
+    
+    # Determine Pull vs Push Propensity
+    # High swing angle flyball hitters tend to pull. Low velocity pitchers are pulled more.
+    pull_factor = (swing - 12.0) * 0.05 + ((95.0 - vel) * 0.02)
+    
+    is_pull_heavy = pull_factor > 0.40
+    is_oppo_heavy = pull_factor < -0.20
+    
+    if is_pull_heavy:
+        alignment = "Pull-Shift"
+        reasoning = f"Hitter has a high swing angle ({swing:.1f}°) and faces a velocity profile ({vel:.1f}mph) that encourages heavy pull distribution. Shift defenders toward the pull side."
+    elif is_oppo_heavy:
+        alignment = "Opposite-Field Shift"
+        reasoning = f"Hitter has a flat swing angle ({swing:.1f}°) and faces high velocity ({vel:.1f}mph), yielding late timing and opposite-field push tendencies. Adjust defense to cover the push zones."
+    else:
+        alignment = "Standard"
+        reasoning = "Hitter displays a balanced hit distribution across all fields. Maintain standard defensive depth and spacing."
+        
+    # Outfield Depth modulation
+    outfield_depth = "Standard"
+    if swing > 22.0:
+        outfield_depth = "Deep"
+        reasoning += " Additionally, deep outfield depth is recommended to prevent extra-base hits from high-launch flies."
+    elif swing < 10.0:
+        outfield_depth = "Shallow"
+        reasoning += " Additionally, shallow outfield depth is recommended to defend against flat line-drive/grounder drops."
+        
+    if runners_on_base and alignment == "Pull-Shift":
+        # Double play depth adjustment
+        reasoning += " Infield adjusted to double-play depth due to runners on base."
+        
+    return {
+        "recommended_alignment": alignment,
+        "outfield_depth": outfield_depth,
+        "reasoning": reasoning,
+        "details": {
+            "pull_propensity_score": round(pull_factor, 3),
+            "infield_positioning": "Double Play Depth" if runners_on_base else "Standard Depth",
+            "outfield_depth": outfield_depth
+        }
+    }

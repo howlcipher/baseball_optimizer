@@ -27,6 +27,29 @@ def _get_random_physical_attributes(name: str) -> dict:
     runners_mod = round(random.uniform(0.005, 0.035), 3)
     fatigue_rate = round(random.uniform(0.005, 0.02), 3)
     at_bat_decay = round(random.uniform(0.004, 0.012), 3)
+    
+    # New physical attributes
+    sprint_speed = round(random.uniform(24.5, 30.5), 1)
+    steal_aggression = round(random.uniform(0.1, 0.9), 2)
+    pop_time = round(random.uniform(1.85, 2.25), 2)
+    framing_rating = round(random.uniform(0.2, 0.8), 2)
+    outs_above_average = random.randint(-8, 12)
+    
+    p_type = random.choice(["Starter", "Reliever", "Closer"])
+    p_arm = random.choice(["Three-Quarters", "Overhand", "Sidearm", "Submarine"])
+    p_rubber = random.choice(["Middle", "First Base Side", "Third Base Side"])
+    p_vel = round(random.uniform(88.0, 99.0), 1)
+    p_cmd = round(random.uniform(0.35, 0.75), 2)
+    p_mov = round(random.uniform(0.35, 0.75), 2)
+    p_wind = round(random.uniform(0.4, 0.9), 2)
+    stamina = round(random.uniform(0.70, 1.0), 2)
+    
+    fb = random.choice([0.50, 0.55, 0.60, 0.65, 0.70])
+    sl = round(random.uniform(0.10, 0.20), 2)
+    cb = round(random.uniform(0.05, 0.15), 2)
+    ch = round(1.0 - fb - sl - cb, 2)
+    pitch_selection = f"Fastball:{fb},Slider:{sl},Curveball:{cb},Changeup:{ch}"
+
     return {
         "typical_swing_angle": swing_angle,
         "bat_swing_speed": swing_speed,
@@ -36,7 +59,21 @@ def _get_random_physical_attributes(name: str) -> dict:
         "stand_in_box": stand_in_box,
         "runners_on_base_modifier": runners_mod,
         "game_progression_fatigue_rate": fatigue_rate,
-        "at_bat_progression_decay": at_bat_decay
+        "at_bat_progression_decay": at_bat_decay,
+        "sprint_speed": sprint_speed,
+        "steal_aggression": steal_aggression,
+        "pop_time": pop_time,
+        "framing_rating": framing_rating,
+        "outs_above_average": outs_above_average,
+        "pitcher_type": p_type,
+        "pitcher_arm_angle": p_arm,
+        "pitcher_rubber_position": p_rubber,
+        "pitcher_velocity": p_vel,
+        "pitcher_command": p_cmd,
+        "pitcher_movement": p_mov,
+        "pitcher_windup_efficiency": p_wind,
+        "pitcher_pitch_selection": pitch_selection,
+        "stamina_pct": stamina
     }
 
 
@@ -214,6 +251,8 @@ def fetch_team_roster(team_name: str) -> list[dict]:
         ("CF", "Center Field"), ("RF", "Right Field"), ("DH", "Designated Hitter"),
         ("C", "Backup Catcher"), ("IF", "Utility Infielder"),
         ("OF", "Fourth Outfielder"), ("DH", "Pinch Hitter"),
+        ("SP", "Starting Pitcher"), ("RP", "Relief Pitcher 1"),
+        ("RP", "Relief Pitcher 2"), ("RP", "Closer")
     ]
     
     rosters = {
@@ -225,6 +264,8 @@ def fetch_team_roster(team_name: str) -> list[dict]:
             ("Pete", "Crow-Armstrong", "DH", "L"), ("Christian", "Bethancourt", "C", "R"),
             ("Miles", "Mastrobuoni", "IF", "L"), ("Mike", "Tauchman", "OF", "L"),
             ("Patrick", "Wisdom", "DH", "R"),
+            ("Justin", "Steele", "SP", "L"), ("Porter", "Hodge", "RP", "R"),
+            ("Tyson", "Miller", "RP", "R"), ("Nate", "Pearson", "RP", "R")
         ],
         "red sox": [
             ("Jarren", "Duran", "CF", "L"), ("Wilyer", "Abreu", "RF", "L"),
@@ -234,6 +275,8 @@ def fetch_team_roster(team_name: str) -> list[dict]:
             ("Vaughn", "Grissom", "2B", "R"), ("Danny", "Jansen", "C", "R"),
             ("Romy", "Gonzalez", "IF", "R"), ("Rob", "Refsnyder", "OF", "R"),
             ("Bobby", "Dalbec", "DH", "R"),
+            ("Tanner", "Houck", "SP", "R"), ("Kenley", "Jansen", "RP", "R"),
+            ("Chris", "Martin", "RP", "R"), ("Liam", "Hendriks", "RP", "R")
         ],
         "yankees": [
             ("Aaron", "Judge", "CF", "R"), ("Juan", "Soto", "RF", "L"),
@@ -243,6 +286,8 @@ def fetch_team_roster(team_name: str) -> list[dict]:
             ("Jazz", "Chisholm Jr.", "3B", "L"), ("Oswaldo", "Cabrera", "IF", "S"),
             ("Trent", "Grisham", "OF", "L"), ("Jose", "Trevino", "C", "R"),
             ("DJ", "LeMahieu", "IF", "R"),
+            ("Gerrit", "Cole", "SP", "R"), ("Luke", "Weaver", "RP", "R"),
+            ("Clay", "Holmes", "RP", "R"), ("Tommy", "Kahnle", "RP", "R")
         ],
         "dodgers": [
             ("Shohei", "Ohtani", "DH", "L"), ("Mookie", "Betts", "RF", "R"),
@@ -252,6 +297,8 @@ def fetch_team_roster(team_name: str) -> list[dict]:
             ("Miguel", "Rojas", "SS", "R"), ("Austin", "Barnes", "C", "R"),
             ("Enrique", "Hernandez", "IF", "R"), ("Andy", "Pages", "OF", "R"),
             ("Chris", "Taylor", "OF", "R"),
+            ("Yoshinobu", "Yamamoto", "SP", "R"), ("Evan", "Phillips", "RP", "R"),
+            ("Michael", "Kopech", "RP", "R"), ("Blake", "Treinen", "RP", "R")
         ],
         "giants": [
             ("Jung Hoo", "Lee", "CF", "L"), ("Matt", "Chapman", "3B", "R"),
@@ -261,6 +308,8 @@ def fetch_team_roster(team_name: str) -> list[dict]:
             ("Tyler", "Fitzgerald", "SS", "R"), ("Heliot", "Ramos", "OF", "R"),
             ("Wilmer", "Flores", "IF", "R"), ("Curt", "Casali", "C", "R"),
             ("Buster", "Posey", "DH", "R"),
+            ("Logan", "Webb", "SP", "R"), ("Ryan", "Walker", "RP", "R"),
+            ("Tyler", "Rogers", "RP", "R"), ("Taylor", "Rogers", "RP", "L")
         ]
     }
     

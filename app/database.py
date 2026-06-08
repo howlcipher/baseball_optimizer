@@ -77,6 +77,28 @@ class Player(Base):
     game_progression_fatigue_rate = Column(Float, default=0.01)
     at_bat_progression_decay = Column(Float, default=0.008)
 
+    # Sprint and baserunning parameters
+    sprint_speed = Column(Float, default=27.0)  # ft/sec
+    steal_aggression = Column(Float, default=0.5)
+
+    # Catcher pop time & framing
+    pop_time = Column(Float, default=2.0)  # seconds
+    framing_rating = Column(Float, default=0.5)
+
+    # Defensive range rating
+    outs_above_average = Column(Integer, default=0)
+
+    # Bullpen / Pitcher attributes
+    pitcher_type = Column(String, default="Reliever")  # "Starter", "Reliever", "Closer"
+    pitcher_arm_angle = Column(String, default="Three-Quarters")
+    pitcher_rubber_position = Column(String, default="Middle")
+    pitcher_velocity = Column(Float, default=93.0)
+    pitcher_command = Column(Float, default=0.5)
+    pitcher_movement = Column(Float, default=0.5)
+    pitcher_windup_efficiency = Column(Float, default=0.8)
+    pitcher_pitch_selection = Column(String, default="Fastball:0.6,Slider:0.2,Curveball:0.1,Changeup:0.1")
+    stamina_pct = Column(Float, default=1.0)
+
     team = relationship("Team", back_populates="players")
 
 

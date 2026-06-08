@@ -542,6 +542,104 @@
         .stadium-stat-row span:last-child {
             font-weight: 600;
         }
+
+        /* ADVANCED STYLES FOR BULLPEN, STEAL, SHIFT */
+        .advanced-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+            grid-column: 1 / -1;
+        }
+
+        @media (max-width: 1024px) {
+            .advanced-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .reliever-row {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            background: var(--input-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 0.65rem 0.85rem;
+            margin-top: 0.5rem;
+        }
+
+        .reliever-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .reliever-name {
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .reliever-score {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 700;
+            font-size: 0.85rem;
+            color: var(--primary);
+        }
+
+        .stamina-bar-container {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            height: 6px;
+            width: 100%;
+            overflow: hidden;
+            margin-top: 0.2rem;
+            margin-bottom: 0.2rem;
+        }
+
+        .stamina-bar {
+            background: linear-gradient(90deg, var(--accent), var(--primary));
+            height: 100%;
+            border-radius: 4px;
+        }
+
+        .reliever-footer {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .diamond-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0.75rem 0;
+            gap: 0.5rem;
+        }
+
+        .diamond-row {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+        }
+
+        .field-position {
+            background: var(--input-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 6px;
+            padding: 0.3rem 0.6rem;
+            font-size: 0.75rem;
+            text-align: center;
+            min-width: 75px;
+        }
+
+        .field-position.shifted {
+            border-color: var(--accent);
+            background: rgba(var(--accent-rgb), 0.15);
+            color: #fff;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -896,6 +994,100 @@
                 </div>
             </div>
 
+            <!-- ADVANCED MATCHUP & POSITIONING SYSTEM -->
+            <div class="advanced-grid">
+                
+                <!-- BULLPEN RELIEF MATCHUP OPTIMIZER -->
+                <div class="glass-card" style="display: flex; flex-direction: column;">
+                    <div class="card-header" style="margin-bottom: 1rem;">
+                        <h2>
+                            ⚾ Bullpen Matchups
+                        </h2>
+                    </div>
+                    
+                    <div class="input-group" style="margin-bottom: 1rem;">
+                        <label for="bullpenOpposingBatter">Opposing Batter</label>
+                        <select id="bullpenOpposingBatter" onchange="runBullpenOptimization()" class="team-dropdown" style="width: 100%; min-width: unset;">
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
+                    
+                    <button class="btn" onclick="runBullpenOptimization()" style="margin-bottom: 1rem;">Optimize Bullpen Matchup</button>
+                    
+                    <div id="bullpenResults" class="stadium-stats" style="flex: 1; max-height: 300px; overflow-y: auto; gap: 0.75rem; padding-right: 0.25rem;">
+                        <div class="result-placeholder">
+                            <p>Select an opposing batter to run optimization.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BASE RUNNING & STEALING SIMULATOR -->
+                <div class="glass-card" style="display: flex; flex-direction: column;">
+                    <div class="card-header" style="margin-bottom: 1rem;">
+                        <h2>
+                            🏃 Base Stealing Simulator
+                        </h2>
+                    </div>
+                    
+                    <div class="config-grid" style="margin-bottom: 0.5rem;">
+                        <div class="input-group">
+                            <label for="stealRunner">Runner</label>
+                            <select id="stealRunner" onchange="runStealOptimization()" class="team-dropdown" style="width: 100%; min-width: unset;">
+                                <!-- Populated dynamically -->
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label for="stealTargetBase">Target Base</label>
+                            <select id="stealTargetBase" onchange="runStealOptimization()" class="team-dropdown" style="width: 100%; min-width: unset;">
+                                <option value="2" selected>2nd Base</option>
+                                <option value="3">3rd Base</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="input-group" style="margin-bottom: 1rem;">
+                        <label for="stealCatcherPop">Catcher Pop Time: <span id="valStealCatcherPop">2.00</span>s</label>
+                        <input type="range" id="stealCatcherPop" min="1.5" max="2.5" value="2.0" step="0.05" oninput="document.getElementById('valStealCatcherPop').innerText=parseFloat(this.value).toFixed(2); runStealOptimization();">
+                    </div>
+                    
+                    <div id="stealResults" class="sub-result-card" style="flex: 1; min-height: auto; padding: 1rem;">
+                        <div class="result-placeholder">
+                            <p>Select runner parameters to simulate steal.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DEFENSIVE SHIFT & ALIGNMENT -->
+                <div class="glass-card" style="display: flex; flex-direction: column;">
+                    <div class="card-header" style="margin-bottom: 1rem;">
+                        <h2>
+                            🛡️ Defensive Shift Alignment
+                        </h2>
+                    </div>
+                    
+                    <div class="config-grid" style="margin-bottom: 0.5rem;">
+                        <div class="input-group">
+                            <label for="shiftBatter">Opposing Batter</label>
+                            <select id="shiftBatter" onchange="runShiftOptimization()" class="team-dropdown" style="width: 100%; min-width: unset;">
+                                <!-- Populated dynamically -->
+                            </select>
+                        </div>
+                        <div class="input-group" style="display: flex; flex-direction: row; align-items: center; gap: 0.5rem; margin-top: 1.25rem;">
+                            <label style="cursor: pointer; display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; user-select: none;">
+                                <input type="checkbox" id="shiftRunnersOnBase" onchange="runShiftOptimization()" style="width: auto; cursor: pointer;"> Runners On Base
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div id="shiftResults" class="sub-result-card" style="flex: 1; min-height: auto; padding: 1rem;">
+                        <div class="result-placeholder">
+                            <p>Select batter to align defensive spacing.</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
         </div>
     </div>
 
@@ -1152,6 +1344,7 @@
 
                 // Load optimization table and batter selection options
                 await fetchLineup();
+                await fetchRosterAndOpponents(data.active_team_id);
 
             } catch (err) {
                 console.error("Config fetch error: ", err);
@@ -1496,6 +1689,14 @@
                     onActiveBatterChange(data.optimized_lineup[0].player_id);
                 }
 
+                // Update stealing and shift optimizations in real-time if elements are present
+                if (document.getElementById("stealRunner") && document.getElementById("stealRunner").value) {
+                    runStealOptimization();
+                }
+                if (document.getElementById("shiftBatter") && document.getElementById("shiftBatter").value) {
+                    runShiftOptimization();
+                }
+
             } catch (err) {
                 console.error("Optimization failed:", err);
                 document.getElementById("lineupBody").innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--accent); padding: 2rem;">Recalculation Error: ${err.message}</td></tr>`;
@@ -1604,6 +1805,254 @@
             } catch (err) {
                 console.error("Sub evaluation failed:", err);
                 alert("Decision evaluation error: " + err.message);
+            }
+        }
+
+        // Fetch all players to split into active roster and opponent batters
+        async function fetchRosterAndOpponents(activeTeamId) {
+            try {
+                const res = await fetch("/api/v1/players");
+                if (!res.ok) throw new Error("Failed to load players list.");
+                const allPlayers = await res.json();
+
+                const ourPlayers = allPlayers.filter(p => p.team_id == activeTeamId && p.position.toUpperCase() !== 'P');
+                const opposingPlayers = allPlayers.filter(p => p.team_id != activeTeamId && p.position.toUpperCase() !== 'P');
+
+                // Populate Steal Runner dropdown
+                const stealDropdown = document.getElementById("stealRunner");
+                const currentStealSel = stealDropdown.value;
+                stealDropdown.innerHTML = "";
+                ourPlayers.forEach(p => {
+                    const opt = document.createElement("option");
+                    opt.value = p.id;
+                    opt.text = `${p.name} (${p.position}) - Speed: ${p.sprint_speed.toFixed(1)}`;
+                    stealDropdown.appendChild(opt);
+                });
+                if (currentStealSel && [...stealDropdown.options].some(o => o.value == currentStealSel)) {
+                    stealDropdown.value = currentStealSel;
+                }
+
+                // Populate Bullpen Opposing Batter dropdown
+                const bpDropdown = document.getElementById("bullpenOpposingBatter");
+                const currentBPSel = bpDropdown.value;
+                bpDropdown.innerHTML = "";
+                
+                opposingPlayers.forEach(p => {
+                    const opt = document.createElement("option");
+                    opt.value = p.id;
+                    let teamAbbr = p.team_id == 112 ? "CHC" : (p.team_id == 111 ? "BOS" : (p.team_id == 11111 ? "NYY" : (p.team_id == 11112 ? "LAD" : "SFG")));
+                    opt.text = `${p.name} (${p.position}) [${teamAbbr}]`;
+                    bpDropdown.appendChild(opt);
+                });
+                if (currentBPSel && [...bpDropdown.options].some(o => o.value == currentBPSel)) {
+                    bpDropdown.value = currentBPSel;
+                }
+
+                // Populate Shift Opposing Batter dropdown
+                const shiftDropdown = document.getElementById("shiftBatter");
+                const currentShiftSel = shiftDropdown.value;
+                shiftDropdown.innerHTML = "";
+                opposingPlayers.forEach(p => {
+                    const opt = document.createElement("option");
+                    opt.value = p.id;
+                    let teamAbbr = p.team_id == 112 ? "CHC" : (p.team_id == 111 ? "BOS" : (p.team_id == 11111 ? "NYY" : (p.team_id == 11112 ? "LAD" : "SFG")));
+                    opt.text = `${p.name} (${p.position}) [${teamAbbr}]`;
+                    shiftDropdown.appendChild(opt);
+                });
+                if (currentShiftSel && [...shiftDropdown.options].some(o => o.value == currentShiftSel)) {
+                    shiftDropdown.value = currentShiftSel;
+                }
+
+                // Initial run once selectors are ready
+                runBullpenOptimization();
+                runStealOptimization();
+                runShiftOptimization();
+
+            } catch (err) {
+                console.error("Error fetching rosters:", err);
+            }
+        }
+
+        // Run Bullpen optimization
+        async function runBullpenOptimization() {
+            const batterId = document.getElementById("bullpenOpposingBatter").value;
+            if (!batterId) return;
+
+            try {
+                const res = await fetch(`/api/v1/optimize/bullpen?opposing_batter_id=${batterId}`);
+                if (!res.ok) throw new Error("Bullpen optimization failed");
+                const data = await res.json();
+
+                const resultsDiv = document.getElementById("bullpenResults");
+                resultsDiv.innerHTML = "";
+
+                if (!data.recommendations || data.recommendations.length === 0) {
+                    resultsDiv.innerHTML = `<div class="result-placeholder"><p>No bullpen relievers found.</p></div>`;
+                    return;
+                }
+
+                data.recommendations.forEach(rec => {
+                    const row = document.createElement("div");
+                    row.className = "reliever-row";
+                    
+                    const staminaPercent = Math.round(rec.stamina_pct * 100);
+                    const effPercent = Math.round(rec.matchup_score * 100);
+
+                    row.innerHTML = `
+                        <div class="reliever-header">
+                            <span class="reliever-name">${rec.name} (${rec.arm_angle})</span>
+                            <span class="reliever-score">${effPercent}% Efficacy</span>
+                        </div>
+                        <div class="stamina-bar-container" title="Stamina: ${staminaPercent}%">
+                            <div class="stamina-bar" style="width: ${staminaPercent}%"></div>
+                        </div>
+                        <div class="reliever-footer">
+                            <span>Expected OPS: ${rec.ops_against.toFixed(3)}</span>
+                            <span>Stamina: ${staminaPercent}%</span>
+                        </div>
+                        <div style="font-size: 0.72rem; font-style: italic; color: var(--text-muted); margin-top: 0.2rem; line-height: 1.25;">
+                            ${rec.reasoning}
+                        </div>
+                    `;
+                    resultsDiv.appendChild(row);
+                });
+
+            } catch (err) {
+                console.error("Bullpen optimization error:", err);
+                document.getElementById("bullpenResults").innerHTML = `<div style="color: var(--accent); font-size: 0.8rem; text-align: center; padding: 1rem;">Optimization Error: ${err.message}</div>`;
+            }
+        }
+
+        // Run Steal simulation
+        async function runStealOptimization() {
+            const runnerId = document.getElementById("stealRunner").value;
+            const targetBase = document.getElementById("stealTargetBase").value;
+            const popTime = document.getElementById("stealCatcherPop").value;
+            
+            const pitchVel = document.getElementById("pitcherVelocityInput").value;
+            const windup = document.getElementById("pitcherWindupInput").value;
+
+            if (!runnerId) return;
+
+            try {
+                const queryParams = new URLSearchParams({
+                    runner_id: runnerId,
+                    target_base: targetBase,
+                    pitcher_velocity: pitchVel,
+                    pitcher_windup_efficiency: windup,
+                    catcher_pop_time: popTime
+                });
+
+                const res = await fetch(`/api/v1/optimize/steal?${queryParams.toString()}`, {
+                    method: "POST"
+                });
+                if (!res.ok) throw new Error("Steal optimization failed");
+                const data = await res.json();
+
+                const resultsDiv = document.getElementById("stealResults");
+                resultsDiv.innerHTML = "";
+
+                const pVal = Math.round(data.success_probability * 100);
+                const recClass = data.recommendation === "STEAL" ? "decision-insert" : "decision-hold";
+                const recText = data.recommendation === "STEAL" ? "GREEN LIGHT" : "RED LIGHT";
+
+                resultsDiv.innerHTML = `
+                    <div class="decision-banner ${recClass}" style="margin-bottom: 0.75rem; font-size: 0.95rem; padding: 0.5rem 0.75rem;">${recText} (${pVal}% Success)</div>
+                    <div class="stadium-stats" style="margin-top: 0; gap: 0.4rem;">
+                        <div class="stadium-stat-row" style="font-size: 0.8rem; padding-bottom: 0.3rem;">
+                            <span>Est. Runner Time</span>
+                            <span>${data.details.estimated_run_time.toFixed(2)}s</span>
+                        </div>
+                        <div class="stadium-stat-row" style="font-size: 0.8rem; padding-bottom: 0.3rem;">
+                            <span>Est. Pitch Delivery</span>
+                            <span>${data.details.estimated_pitch_delivery_time.toFixed(2)}s</span>
+                        </div>
+                        <div class="stadium-stat-row" style="font-size: 0.8rem; padding-bottom: 0.3rem;">
+                            <span>Est. Catcher Pop + Throw</span>
+                            <span>${popTime}s</span>
+                        </div>
+                        <div class="stadium-stat-row" style="border-bottom: none; padding-bottom: 0; font-size: 0.8rem;">
+                            <span>Time Margin</span>
+                            <span class="${data.details.time_margin >= 0 ? 'ops-gain' : 'ops-loss'}">${data.details.time_margin >= 0 ? '+' : ''}${data.details.time_margin.toFixed(2)}s</span>
+                        </div>
+                    </div>
+                    <div style="font-size: 0.75rem; color: var(--text-main); margin-top: 0.65rem; background: rgba(var(--primary-rgb), 0.08); padding: 0.5rem 0.65rem; border-radius: 6px; border-left: 3px solid var(--primary); line-height: 1.25;">
+                        ${data.reasoning}
+                    </div>
+                `;
+
+            } catch (err) {
+                console.error("Steal optimization error:", err);
+                document.getElementById("stealResults").innerHTML = `<div style="color: var(--accent); font-size: 0.8rem; text-align: center; padding: 1rem;">Simulation Error: ${err.message}</div>`;
+            }
+        }
+
+        // Run Shift optimization
+        async function runShiftOptimization() {
+            const batterId = document.getElementById("shiftBatter").value;
+            const runnersOnBase = document.getElementById("shiftRunnersOnBase").checked;
+            const pitchVel = document.getElementById("pitcherVelocityInput").value;
+
+            if (!batterId) return;
+
+            try {
+                const queryParams = new URLSearchParams({
+                    batter_id: batterId,
+                    pitcher_velocity: pitchVel,
+                    runners_on_base: runnersOnBase
+                });
+
+                const res = await fetch(`/api/v1/optimize/defensive-shift?${queryParams.toString()}`, {
+                    method: "POST"
+                });
+                if (!res.ok) throw new Error("Shift optimization failed");
+                const data = await res.json();
+
+                const resultsDiv = document.getElementById("shiftResults");
+                resultsDiv.innerHTML = "";
+
+                const alignment = data.recommended_alignment;
+                const outfieldDepth = data.outfield_depth;
+
+                let shiftClass = "background: linear-gradient(135deg, #4b5563, #6b7280);";
+                if (alignment === "Pull-Shift") {
+                    shiftClass = "background: linear-gradient(135deg, var(--accent), #f97316); box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.3);";
+                } else if (alignment === "Opposite-Field Shift") {
+                    shiftClass = "background: linear-gradient(135deg, var(--primary), #3b82f6); box-shadow: 0 0 10px rgba(var(--primary-rgb), 0.3);";
+                }
+
+                const isPull = alignment === "Pull-Shift";
+                const isOppo = alignment === "Opposite-Field Shift";
+
+                resultsDiv.innerHTML = `
+                    <div class="decision-banner" style="${shiftClass} margin-bottom: 0.75rem; font-size: 0.95rem; padding: 0.5rem 0.75rem;">${alignment} (${outfieldDepth})</div>
+                    
+                    <div class="diamond-container">
+                        <div class="diamond-row">
+                            <div class="field-position ${outfieldDepth !== 'Standard' ? 'shifted' : ''}">LF (${outfieldDepth})</div>
+                            <div class="field-position ${outfieldDepth !== 'Standard' ? 'shifted' : ''}">CF (${outfieldDepth})</div>
+                            <div class="field-position ${outfieldDepth !== 'Standard' ? 'shifted' : ''}">RF (${outfieldDepth})</div>
+                        </div>
+                        
+                        <div class="diamond-row" style="margin-top: 0.25rem;">
+                            <div class="field-position ${isPull ? 'shifted' : ''}">SS ${isPull ? '➔ R' : (isOppo ? '➔ L' : 'Std')}</div>
+                            <div class="field-position ${isPull ? 'shifted' : ''}">2B ${isPull ? '➔ R' : (isOppo ? '➔ L' : 'Std')}</div>
+                        </div>
+                        
+                        <div class="diamond-row" style="margin-top: 0.25rem;">
+                            <div class="field-position ${isOppo ? 'shifted' : ''}">3B ${isOppo ? 'Std' : ''}</div>
+                            <div class="field-position ${isPull ? 'shifted' : ''}">1B ${isPull ? 'Std' : ''}</div>
+                        </div>
+                    </div>
+
+                    <div style="font-size: 0.75rem; color: var(--text-main); margin-top: 0.5rem; background: rgba(var(--primary-rgb), 0.08); padding: 0.5rem 0.65rem; border-radius: 6px; border-left: 3px solid var(--primary); line-height: 1.25;">
+                        ${data.reasoning}
+                    </div>
+                `;
+
+            } catch (err) {
+                console.error("Shift optimization error:", err);
+                document.getElementById("shiftResults").innerHTML = `<div style="color: var(--accent); font-size: 0.8rem; text-align: center; padding: 1rem;">Alignment Error: ${err.message}</div>`;
             }
         }
     </script>

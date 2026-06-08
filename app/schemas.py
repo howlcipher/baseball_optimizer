@@ -55,6 +55,20 @@ class PlayerSchema(BaseModel):
     runners_on_base_modifier: float
     game_progression_fatigue_rate: float
     at_bat_progression_decay: float
+    sprint_speed: float
+    steal_aggression: float
+    pop_time: float
+    framing_rating: float
+    outs_above_average: int
+    pitcher_type: str
+    pitcher_arm_angle: str
+    pitcher_rubber_position: str
+    pitcher_velocity: float
+    pitcher_command: float
+    pitcher_movement: float
+    pitcher_windup_efficiency: float
+    pitcher_pitch_selection: str
+    stamina_pct: float
 
     class Config:
         from_attributes = True
@@ -140,3 +154,40 @@ class TacticalSubResponse(BaseModel):
     proposed_sub_adjusted_ops_cold: Optional[float] = None
     cold_bench_friction_tax_applied: float
     reasoning: str
+
+
+class BullpenRelieverRecommendation(BaseModel):
+    player_id: int
+    name: str
+    pitcher_type: str
+    stamina_pct: float
+    arm_angle: str
+    rubber_position: str
+    matchup_score: float
+    ops_against: float
+    reasoning: str
+
+
+class BullpenOptimizationResponse(BaseModel):
+    opposing_batter_name: str
+    opposing_batter_handedness: str
+    opposing_batter_ops: float
+    recommendations: List[BullpenRelieverRecommendation]
+
+
+class StealOptimizationResponse(BaseModel):
+    runner_name: str
+    sprint_speed: float
+    steal_aggression: float
+    success_probability: float
+    recommendation: str
+    reasoning: str
+    details: dict
+
+
+class DefensiveShiftResponse(BaseModel):
+    batter_name: str
+    typical_swing_angle: float
+    recommended_alignment: str
+    reasoning: str
+    details: dict

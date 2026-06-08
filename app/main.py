@@ -15,7 +15,11 @@ from app.schemas import (
     TacticalSubRequest,
     TacticalSubResponse,
     ManagerialOverrideSchema,
-    EnvironmentalContextSchema
+    EnvironmentalContextSchema,
+    BullpenOptimizationResponse,
+    StealOptimizationResponse,
+    DefensiveShiftResponse,
+    PlayerSchema
 )
 from app.scrapers import fetch_team_roster
 from app.calculator import calculate_true_projection
@@ -351,6 +355,19 @@ def apply_platoon_splits(base_obp: float, base_slg: float, batter_hand: str, pit
         return base_obp + 0.02, base_slg + 0.04
     else:
         return base_obp - 0.01, base_slg - 0.02
+
+
+@app.get("/api/v1/players", response_model=List[PlayerSchema])
+def get_players(team_id: Optional[int] = None, position: Optional[str] = None, db: Session = Depends(get_db)):
+    """
+    Returns a list of players, optionally filtered by team_id and position.
+    """
+    query = db.query(Player)
+    if team_id is not None:
+        query = query.filter(Player.team_id == team_id)
+    if position is not None:
+        query = query.filter(Player.position.like(f"%{position}%"))
+    return query.all()
 
 
 # --- Category II: Tactical Roster Optimization ---
@@ -893,4 +910,194 @@ def tactical_sub(payload: TacticalSubRequest, db: Session = Depends(get_db)):
         proposed_sub_adjusted_ops_cold=round(best_sub_ops_cold, 3) if best_sub else None,
         cold_bench_friction_tax_applied=mgr.cold_bench_friction_tax,
         reasoning=reasoning
+    )
+
+
+# --- Category IV: Advanced Bullpen, Baserunning, and Defensive Positioning ---
+
+@app.get("/api/v1/optimize/bullpen", response_model=BullpenOptimizationResponse)
+def optimize_bullpen(
+    opposing_batter_id: int = Query(..., description="Player ID of the opposing batter to optimize against"),
+    db: Session = Depends(get_db)
+):
+    """
+    Evaluates our active bullpen relievers against the specified opposing batter's attributes.
+    Recommends the optimal relief pitcher insertion based on platoon splits, stamina fatigue,
+    and pitch compatibility.
+    """
+    team = get_active_team(db)
+    mgr = team.managerial_override
+    env = team.environmental_context
+    if not mgr or not env:
+        raise HTTPException(status_code=500, detail="Team configuration is missing environment or overrides.")
+        
+    opposing_batter = db.query(Player).filter(Player.id == opposing_batter_id).first()
+    if not opposing_batter:
+        raise HTTPException(status_code=404, detail=f"Opposing batter with ID {opposing_batter_id} not found.")
+
+    logger.info(f"Optimizing bullpen matching against batter {opposing_batter.name} ({opposing_batter.batting_handedness})...")
+
+    # Load relievers on our team (position matches RP or Closer)
+    relievers = db.query(Player).filter(
+        Player.team_id == team.id,
+        (Player.position.like("%RP%")) | (Player.position == "Closer")
+    ).all()
+    
+    recommendations = []
+    for rel in relievers:
+        # 1. Apply platoon splits using helper
+        obp_pl, slg_pl = apply_platoon_splits(
+            opposing_batter.base_obp,
+            opposing_batter.base_slg,
+            opposing_batter.batting_handedness,
+            rel.batting_handedness  # reliever throwing hand
+        )
+        
+        # 2. Factor in reliever stamina to adjust their velocity/command
+        rel_vel = rel.pitcher_velocity
+        rel_cmd = rel.pitcher_command
+        if rel.stamina_pct < 1.0:
+            rel_vel -= (1.0 - rel.stamina_pct) * 5.0  # fatigue velocity drop
+            rel_cmd *= rel.stamina_pct               # fatigue command drop
+            
+        # 3. Calculate batter adjusted OPS against this reliever
+        factors = calculate_true_projection(
+            base_obp=obp_pl,
+            base_slg=slg_pl,
+            cumulative_days=opposing_batter.cumulative_days_played,
+            fatigue_threshold=mgr.fatigue_threshold,
+            disrupted_sleep=opposing_batter.disrupted_sleep_hours,
+            leverage_scenario="normal",
+            anxiety_modifier=opposing_batter.leverage_anxiety_modifier,
+            clutch_weight=mgr.clutch_weight,
+            base_park_factor=team.base_park_factor,
+            elevation=team.elevation,
+            wind_direction=env.wind_direction,
+            wind_velocity=env.wind_velocity,
+            # Batter stats
+            typical_swing_angle=opposing_batter.typical_swing_angle,
+            bat_swing_speed=opposing_batter.bat_swing_speed,
+            choke_up=opposing_batter.choke_up,
+            bat_size=opposing_batter.bat_size,
+            bat_weight=opposing_batter.bat_weight,
+            stand_in_box=opposing_batter.stand_in_box,
+            # Reliever stats as Pitcher parameters
+            pitcher_arm_angle=rel.pitcher_arm_angle,
+            pitcher_rubber_position=rel.pitcher_rubber_position,
+            pitcher_velocity=rel_vel,
+            pitcher_command=rel_cmd,
+            pitcher_movement=rel.pitcher_movement,
+            pitcher_windup_efficiency=rel.pitcher_windup_efficiency,
+            pitcher_pitch_selection=rel.pitcher_pitch_selection,
+            pitcher_pitch_location="Down-Middle",  # standard matchup test
+            pitcher_handedness=rel.batting_handedness, # pitcher throwing hand
+            # Natural parameters to assess active shift friction
+            pitcher_natural_arm_angle=rel.pitcher_arm_angle,
+            pitcher_natural_rubber_position=rel.pitcher_rubber_position
+        )
+        
+        ops_against = factors["adjusted_ops"]
+        # Matchup Score represents reliever efficacy (lower batter OPS = higher matchup score)
+        matchup_score = max(0.0, round(1.5 - ops_against, 3))
+        
+        # Determine reliever specific reasoning
+        reason = f"Reliever {rel.name} (stamina: {rel.stamina_pct*100:.0f}%) "
+        if rel.pitcher_arm_angle.lower() in {"sidearm", "submarine"} and opposing_batter.batting_handedness == rel.batting_handedness:
+            reason += f"provides an elite same-handed sidearm matchup advantage against {opposing_batter.name}."
+        elif rel.batting_handedness != opposing_batter.batting_handedness:
+            reason += f"yields a clean opposite-handed platoon advantage."
+        else:
+            reason += "presents standard same-handed command spacing."
+            
+        recommendations.append(
+            BullpenRelieverRecommendation(
+                player_id=rel.id,
+                name=rel.name,
+                pitcher_type=rel.pitcher_type,
+                stamina_pct=rel.stamina_pct,
+                arm_angle=rel.pitcher_arm_angle,
+                rubber_position=rel.pitcher_rubber_position,
+                matchup_score=matchup_score,
+                ops_against=ops_against,
+                reasoning=reason
+            )
+        )
+        
+    # Sort relievers by matchup score descending (highest matchup_score = best reliever)
+    recommendations.sort(key=lambda r: r.matchup_score, reverse=True)
+    
+    return BullpenOptimizationResponse(
+        opposing_batter_name=opposing_batter.name,
+        opposing_batter_handedness=opposing_batter.batting_handedness,
+        opposing_batter_ops=opposing_batter.base_ops,
+        recommendations=recommendations
+    )
+
+
+@app.post("/api/v1/optimize/steal", response_model=StealOptimizationResponse)
+def optimize_steal(
+    runner_id: int = Query(..., description="Player ID of our base runner"),
+    target_base: int = Query(2, description="Target base to steal (2 or 3)"),
+    pitcher_velocity: float = Query(93.0, description="Pitcher fastball velocity"),
+    pitcher_windup_efficiency: float = Query(0.8, description="Pitcher windup efficiency/slide-step"),
+    catcher_pop_time: float = Query(2.0, description="Catcher pop time in seconds"),
+    db: Session = Depends(get_db)
+):
+    """
+    Calculates the exact probability of success for a steal attempt by our base runner.
+    Takes runner sprint metrics and matches them against pitcher release & catcher pop time.
+    """
+    runner = db.query(Player).filter(Player.id == runner_id).first()
+    if not runner:
+        raise HTTPException(status_code=404, detail=f"Runner with ID {runner_id} not found.")
+        
+    from app.calculator import calculate_steal_probability
+    result = calculate_steal_probability(
+        runner_sprint_speed=runner.sprint_speed,
+        runner_steal_aggression=runner.steal_aggression,
+        pitcher_velocity=pitcher_velocity,
+        pitcher_windup_efficiency=pitcher_windup_efficiency,
+        catcher_pop_time=catcher_pop_time,
+        target_base=target_base
+    )
+    
+    return StealOptimizationResponse(
+        runner_name=runner.name,
+        sprint_speed=runner.sprint_speed,
+        steal_aggression=runner.steal_aggression,
+        success_probability=result["success_probability"],
+        recommendation=result["recommendation"],
+        reasoning=result["reasoning"],
+        details=result["details"]
+    )
+
+
+@app.post("/api/v1/optimize/defensive-shift", response_model=DefensiveShiftResponse)
+def optimize_defensive_shift(
+    batter_id: int = Query(..., description="Player ID of the active batter to align defense against"),
+    pitcher_velocity: float = Query(93.0, description="Current pitcher fastball velocity"),
+    runners_on_base: bool = Query(False, description="Whether base runners are present"),
+    db: Session = Depends(get_db)
+):
+    """
+    Calculates the optimal defensive spacing and outfield depth shifts against the active batter.
+    """
+    batter = db.query(Player).filter(Player.id == batter_id).first()
+    if not batter:
+        raise HTTPException(status_code=404, detail=f"Batter with ID {batter_id} not found.")
+        
+    from app.calculator import calculate_defensive_shift_alignment
+    result = calculate_defensive_shift_alignment(
+        typical_swing_angle=batter.typical_swing_angle,
+        batting_handedness=batter.batting_handedness,
+        pitcher_velocity=pitcher_velocity,
+        runners_on_base=runners_on_base
+    )
+    
+    return DefensiveShiftResponse(
+        batter_name=batter.name,
+        typical_swing_angle=batter.typical_swing_angle,
+        recommended_alignment=result["recommended_alignment"],
+        reasoning=result["reasoning"],
+        details=result["details"]
     )

@@ -1,0 +1,608 @@
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+:root {
+    /* Default Chicago Cubs Theme */
+    --primary: #0E3386;
+    --primary-rgb: 14, 51, 134;
+    --accent: #CC3433;
+    --accent-rgb: 204, 52, 51;
+    --bg-dark: #090e1a;
+    --card-bg: rgba(20, 30, 55, 0.65);
+    --card-border: rgba(255, 255, 255, 0.08);
+    --input-bg: rgba(10, 15, 30, 0.6);
+    --text-main: #f3f4f6;
+    --text-muted: #9ca3af;
+    --glow-color: rgba(14, 51, 134, 0.3);
+    --toggle-bg: rgba(255, 255, 255, 0.08);
+    --transition-speed: 0.4s;
+}
+
+body, header, div, span, button, input, select {
+    transition: background-color var(--transition-speed) ease, 
+                border-color var(--transition-speed) ease, 
+                box-shadow var(--transition-speed) ease, 
+                color var(--transition-speed) ease;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background: radial-gradient(circle at 50% 0%, rgba(var(--primary-rgb), 0.15) 0%, var(--bg-dark) 75%);
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    min-height: 100vh;
+    line-height: 1.5;
+    padding-bottom: 3rem;
+    overflow-x: hidden;
+}
+
+h1, h2, h3, h4 {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+}
+
+.container {
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 1.5rem;
+}
+
+.glass-card {
+    background: var(--card-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--card-border);
+    padding-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.logo-section {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.logo-icon {
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 1.3rem;
+    box-shadow: 0 0 15px var(--glow-color);
+}
+
+.logo-title h1 {
+    font-size: 1.5rem;
+    letter-spacing: -0.5px;
+    background: linear-gradient(to right, var(--text-main), var(--text-muted));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.logo-title p {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-weight: 600;
+}
+
+.team-selector-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.theme-toggle-btn {
+    background: var(--toggle-bg);
+    border: 1px solid var(--card-border);
+    color: var(--text-main);
+    padding: 0.55rem 0.85rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.theme-toggle-btn:hover {
+    opacity: 0.9;
+    transform: translateY(-0.5px);
+}
+
+.select-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+select.team-dropdown {
+    background: var(--input-bg);
+    border: 1px solid var(--card-border);
+    color: var(--text-main);
+    padding: 0.6rem 2rem 0.6rem 1rem;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    outline: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.7rem center;
+    background-size: 1.1rem;
+    min-width: 200px;
+}
+
+select.team-dropdown:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 10px var(--glow-color);
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 1.5rem;
+    align-items: start;
+}
+
+@media (max-width: 1024px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+    border-bottom: 1px solid var(--card-border);
+    padding-bottom: 0.75rem;
+}
+
+.card-header h2 {
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.config-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.input-group label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.input-group input, .input-group select {
+    background: var(--input-bg);
+    border: 1px solid var(--card-border);
+    color: var(--text-main);
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.85rem;
+    outline: none;
+}
+
+.input-group input:focus, .input-group select:focus {
+    border-color: var(--primary);
+}
+
+.input-group.full-width {
+    grid-column: 1 / -1;
+}
+
+.btn {
+    background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.7));
+    color: #fff;
+    border: none;
+    padding: 0.65rem 1rem;
+    border-radius: 8px;
+    font-weight: 600;
+    font-family: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    width: 100%;
+}
+
+.btn:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.lineup-controls {
+    display: flex;
+    justify-content: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.lineup-table-wrapper {
+    overflow-x: auto;
+}
+
+table.lineup-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 0.85rem;
+}
+
+table.lineup-table th {
+    color: var(--text-muted);
+    font-weight: 600;
+    padding: 0.75rem 0.5rem;
+    border-bottom: 1px solid var(--card-border);
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+}
+
+table.lineup-table td {
+    padding: 0.85rem 0.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    font-weight: 500;
+}
+
+table.lineup-table tr:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.order-badge {
+    background: rgba(var(--primary-rgb), 0.2);
+    color: #fff;
+    border: 1px solid rgba(var(--primary-rgb), 0.4);
+    border-radius: 6px;
+    font-weight: 700;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+}
+
+.pos-badge {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.hand-badge {
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.factor-tag {
+    font-size: 0.75rem;
+    padding: 0.1rem 0.3rem;
+    border-radius: 4px;
+    font-weight: 600;
+    margin-right: 0.3rem;
+    display: inline-block;
+}
+
+.factor-green {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+}
+
+.factor-red {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+}
+
+.factor-neutral {
+    background: rgba(156, 163, 175, 0.1);
+    color: #d1d5db;
+}
+
+.ops-value {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.ops-adjusted {
+    color: var(--primary);
+}
+
+.ops-gain {
+    color: #34d399;
+}
+
+.ops-loss {
+    color: #f87171;
+}
+
+.tactical-section {
+    margin-top: 1.5rem;
+    grid-column: 1 / -1;
+}
+
+.tactical-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 2fr;
+    gap: 1.5rem;
+}
+
+@media (max-width: 900px) {
+    .tactical-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.tactical-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.sub-result-card {
+    background: var(--input-bg);
+    border-radius: 12px;
+    border: 1px solid var(--card-border);
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 250px;
+}
+
+.result-placeholder {
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.result-placeholder svg {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 0.75rem;
+    stroke: rgba(255, 255, 255, 0.15);
+}
+
+.decision-banner {
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-weight: 800;
+    text-align: center;
+    font-size: 1.1rem;
+    letter-spacing: 1px;
+    margin-bottom: 1.25rem;
+    text-transform: uppercase;
+}
+
+.decision-insert {
+    background: linear-gradient(135deg, #059669, #10b981);
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+    border: 1px solid rgba(16, 185, 129, 0.6);
+    color: #fff;
+}
+
+.decision-hold {
+    background: linear-gradient(135deg, #b91c1c, #ef4444);
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+    border: 1px solid rgba(239, 68, 68, 0.6);
+    color: #fff;
+}
+
+.sub-comparison {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 1.25rem;
+    gap: 1rem;
+}
+
+.comp-box {
+    flex: 1;
+    background: var(--input-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 0.75rem;
+    text-align: center;
+}
+
+.comp-box p {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+}
+
+.comp-box h3 {
+    font-size: 1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 0.25rem;
+}
+
+.comp-box .ops {
+    font-size: 1.2rem;
+    font-weight: 800;
+    font-family: 'Outfit', sans-serif;
+}
+
+.reasoning-text {
+    font-size: 0.85rem;
+    color: var(--text-main);
+    background: rgba(var(--primary-rgb), 0.08);
+    padding: 0.85rem;
+    border-radius: 8px;
+    border-left: 3px solid var(--primary);
+    line-height: 1.4;
+}
+
+.stadium-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    margin-top: 1rem;
+}
+
+.stadium-stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    padding-bottom: 0.5rem;
+}
+
+.stadium-stat-row span:first-child {
+    color: var(--text-muted);
+}
+
+.stadium-stat-row span:last-child {
+    font-weight: 600;
+}
+
+/* ADVANCED STYLES FOR BULLPEN, STEAL, SHIFT */
+.advanced-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 1024px) {
+    .advanced-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.reliever-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    background: var(--input-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 0.65rem 0.85rem;
+    margin-top: 0.5rem;
+}
+
+.reliever-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.reliever-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.reliever-score {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--primary);
+}
+
+.stamina-bar-container {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+    height: 6px;
+    width: 100%;
+    overflow: hidden;
+    margin-top: 0.2rem;
+    margin-bottom: 0.2rem;
+}
+
+.stamina-bar {
+    background: linear-gradient(90deg, var(--accent), var(--primary));
+    height: 100%;
+    border-radius: 4px;
+}
+
+.reliever-footer {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.diamond-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0.75rem 0;
+    gap: 0.5rem;
+}
+
+.diamond-row {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+
+.field-position {
+    background: var(--input-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.75rem;
+    text-align: center;
+    min-width: 75px;
+}
+
+.field-position.shifted {
+    border-color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.15);
+    color: #fff;
+    font-weight: 600;
+}

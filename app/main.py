@@ -3,6 +3,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from fastapi import FastAPI, Depends, HTTPException, Query, status
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -1135,3 +1136,6 @@ def optimize_defensive_shift(
         reasoning=result["reasoning"],
         details=result["details"]
     )
+
+# Mount the static directory to serve assets (JS, CSS, images)
+app.mount("/", StaticFiles(directory="/run/media/system/tallgeese/dev/baseball_optimizer/static", html=True), name="static")

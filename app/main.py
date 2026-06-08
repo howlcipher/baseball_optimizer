@@ -562,25 +562,41 @@ def optimize_lineup(
     current_assignment = {}
     assigned_positions = set()
     
-    def backtrack(idx):
+    # Precompute maximum possible OPS per player to implement Branch and Bound pruning
+    max_ops_per_player = [
+        max(player_ops_at_pos[p["player_id"]][pos]["ops"] for pos in positions_pool)
+        for p in top_9_candidates
+    ]
+    suffix_max_ops = [0.0] * 10
+    for i in range(8, -1, -1):
+        suffix_max_ops[i] = suffix_max_ops[i+1] + max_ops_per_player[i]
+    
+    def backtrack(idx, current_sum):
         nonlocal best_sum_ops, best_assignment
+        # Pruning check: can the remaining players possibly push us past the current best?
+        if current_sum + suffix_max_ops[idx] <= best_sum_ops:
+            return
+            
         if idx == len(top_9_candidates):
-            curr_sum = sum(player_ops_at_pos[p["player_id"]][current_assignment[p["player_id"]]]["ops"] for p in top_9_candidates)
-            if curr_sum > best_sum_ops:
-                best_sum_ops = curr_sum
+            if current_sum > best_sum_ops:
+                best_sum_ops = current_sum
                 best_assignment = current_assignment.copy()
             return
             
         p = top_9_candidates[idx]
+        p_id = p["player_id"]
         for pos in positions_pool:
             if pos not in assigned_positions:
                 assigned_positions.add(pos)
-                current_assignment[p["player_id"]] = pos
-                backtrack(idx + 1)
-                current_assignment.pop(p["player_id"])
+                current_assignment[p_id] = pos
+                
+                ops_val = player_ops_at_pos[p_id][pos]["ops"]
+                backtrack(idx + 1, current_sum + ops_val)
+                
+                current_assignment.pop(p_id)
                 assigned_positions.remove(pos)
                 
-    backtrack(0)
+    backtrack(0, 0.0)
     
     # Construct OptimizedLineupPlayer instances with their assigned positions
     lineup_players = []

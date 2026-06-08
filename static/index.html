@@ -661,6 +661,89 @@
                     </form>
                 </div>
 
+                <!-- OPPOSING PITCHER PROFILE -->
+                <div class="glass-card">
+                    <div class="card-header">
+                        <h2>
+                            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>
+                            Opposing Pitcher Profile
+                        </h2>
+                    </div>
+                    
+                    <div class="config-grid">
+                        <div class="input-group">
+                            <label for="pitcherHandSelect">Handedness</label>
+                            <select id="pitcherHandSelect" onchange="fetchLineup()">
+                                <option value="R">R (Right-Handed)</option>
+                                <option value="L">L (Left-Handed)</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label for="pitcherArmSelect">Arm Angle</label>
+                            <select id="pitcherArmSelect" onchange="fetchLineup()">
+                                <option value="Three-Quarters" selected>Three-Quarters</option>
+                                <option value="Overhand">Overhand</option>
+                                <option value="Sidearm">Sidearm</option>
+                                <option value="Submarine">Submarine</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label for="pitcherRubberSelect">Rubber Position</label>
+                            <select id="pitcherRubberSelect" onchange="fetchLineup()">
+                                <option value="Middle" selected>Middle</option>
+                                <option value="First Base Side">First Base Side</option>
+                                <option value="Third Base Side">Third Base Side</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label for="pitcherLocationSelect">Target Location</label>
+                            <select id="pitcherLocationSelect" onchange="fetchLineup()">
+                                <option value="Low-Outside" selected>Low-Outside</option>
+                                <option value="High-Inside">High-Inside</option>
+                                <option value="Low-Inside">Low-Inside</option>
+                                <option value="High-Outside">High-Outside</option>
+                                <option value="Down-Middle">Down-Middle</option>
+                            </select>
+                        </div>
+                        <div class="input-group full-width">
+                            <label for="pitcherVelocityInput">Fastball Velocity: <span id="valVelocity">93</span> mph</label>
+                            <input type="range" id="pitcherVelocityInput" min="80" max="105" value="93" step="0.5" oninput="document.getElementById('valVelocity').innerText=this.value; fetchLineup();">
+                        </div>
+                        <div class="input-group">
+                            <label for="pitcherCommandInput">Command: <span id="valCommand">0.50</span></label>
+                            <input type="range" id="pitcherCommandInput" min="0.0" max="1.0" value="0.5" step="0.05" oninput="document.getElementById('valCommand').innerText=parseFloat(this.value).toFixed(2); fetchLineup();">
+                        </div>
+                        <div class="input-group">
+                            <label for="pitcherMovementInput">Movement: <span id="valMovement">0.50</span></label>
+                            <input type="range" id="pitcherMovementInput" min="0.0" max="1.0" value="0.5" step="0.05" oninput="document.getElementById('valMovement').innerText=parseFloat(this.value).toFixed(2); fetchLineup();">
+                        </div>
+                        <div class="input-group full-width">
+                            <label for="pitcherWindupInput">Windup/Slide-Step: <span id="valWindup">0.80</span></label>
+                            <input type="range" id="pitcherWindupInput" min="0.0" max="1.0" value="0.8" step="0.05" oninput="document.getElementById('valWindup').innerText=parseFloat(this.value).toFixed(2); fetchLineup();">
+                        </div>
+                        
+                        <div class="full-width" style="margin-top: 0.5rem; margin-bottom: 0.25rem;">
+                            <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">Pitch Selection Mix (Sum: <span id="valPitchSum">100</span>%)</span>
+                        </div>
+                        <div class="input-group">
+                            <label style="font-size: 0.75rem;">Fastball: <span id="valFB">60</span>%</label>
+                            <input type="range" id="pitchFB" min="0" max="100" value="60" step="5" oninput="adjustPitches('FB');">
+                        </div>
+                        <div class="input-group">
+                            <label style="font-size: 0.75rem;">Slider: <span id="valSL">20</span>%</label>
+                            <input type="range" id="pitchSL" min="0" max="100" value="20" step="5" oninput="adjustPitches('SL');">
+                        </div>
+                        <div class="input-group">
+                            <label style="font-size: 0.75rem;">Curveball: <span id="valCB">10</span>%</label>
+                            <input type="range" id="pitchCB" min="0" max="100" value="10" step="5" oninput="adjustPitches('CB');">
+                        </div>
+                        <div class="input-group">
+                            <label style="font-size: 0.75rem;">Changeup: <span id="valCH">10</span>%</label>
+                            <input type="range" id="pitchCH" min="0" max="100" value="10" step="5" oninput="adjustPitches('CH');">
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
             <!-- RIGHT PANEL: ROSTER BATTING ORDER -->
@@ -673,14 +756,7 @@
                 </div>
 
                 <div class="lineup-controls">
-                    <div class="input-group">
-                        <label for="pitcherHandSelect">Opposing Pitcher Handedness</label>
-                        <select id="pitcherHandSelect" onchange="fetchLineup()">
-                            <option value="R">R (Right-Handed)</option>
-                            <option value="L">L (Left-Handed)</option>
-                        </select>
-                    </div>
-                    <div class="input-group">
+                    <div class="input-group" style="width: 100%;">
                         <label for="leverageSelect">Leverage Index (LI)</label>
                         <select id="leverageSelect" onchange="fetchLineup()">
                             <option value="normal">Normal Leverage (Low/Medium LI)</option>
@@ -742,11 +818,22 @@
                             </select>
                         </div>
                         <div class="input-group">
-                            <label for="subPitcherHand">Active Pitcher Hand</label>
-                            <select id="subPitcherHand">
-                                <option value="L">L (Left-Handed)</option>
-                                <option value="R" selected>R (Right-Handed)</option>
-                            </select>
+                            <label for="subPitchCount">Pitches in At-Bat</label>
+                            <input type="number" id="subPitchCount" value="0" min="0" max="15" required>
+                        </div>
+                        <div class="input-group full-width">
+                            <label style="font-weight: 600;">Base Runners</label>
+                            <div style="display: flex; gap: 1rem; align-items: center; padding: 0.25rem 0;">
+                                <label style="font-size: 0.8rem; font-weight: normal; display: flex; align-items: center; gap: 0.3rem; margin: 0; cursor: pointer;">
+                                    <input type="checkbox" id="runner1B"> 1st Base
+                                </label>
+                                <label style="font-size: 0.8rem; font-weight: normal; display: flex; align-items: center; gap: 0.3rem; margin: 0; cursor: pointer;">
+                                    <input type="checkbox" id="runner2B"> 2nd Base
+                                </label>
+                                <label style="font-size: 0.8rem; font-weight: normal; display: flex; align-items: center; gap: 0.3rem; margin: 0; cursor: pointer;">
+                                    <input type="checkbox" id="runner3B"> 3rd Base
+                                </label>
+                            </div>
                         </div>
                         <div class="input-group full-width">
                             <label for="subRunDifference">Score Differential (Batting Team Rel.)</label>
@@ -755,8 +842,24 @@
                         </div>
                         <div class="input-group full-width">
                             <label for="subActiveBatter">Active Batter</label>
-                            <select id="subActiveBatter">
+                            <select id="subActiveBatter" onchange="onActiveBatterChange(this.value)">
                                 <!-- JS populated options -->
+                            </select>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label for="sandboxStance">Stance Override</label>
+                            <select id="sandboxStance">
+                                <option value="Middle" selected>Middle (Default)</option>
+                                <option value="Close">Close to Plate</option>
+                                <option value="Away">Away from Plate</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label for="sandboxChoke">Grip Override</label>
+                            <select id="sandboxChoke">
+                                <option value="0" selected>Normal Grip</option>
+                                <option value="1">Choked Up</option>
                             </select>
                         </div>
                         
@@ -1213,13 +1316,71 @@
             }
         }
 
+        // Handle active batter selection change and preload overrides
+        function onActiveBatterChange(playerId) {
+            const player = currentActiveRoster.find(p => p.player_id == playerId);
+            if (player) {
+                document.getElementById("sandboxStance").value = player.stand_in_box;
+                document.getElementById("sandboxChoke").value = player.choke_up.toString();
+            }
+        }
+
+        // Adjust pitch frequencies to balance around sliders
+        function adjustPitches(changedType) {
+            const fb = parseInt(document.getElementById("pitchFB").value);
+            const sl = parseInt(document.getElementById("pitchSL").value);
+            const cb = parseInt(document.getElementById("pitchCB").value);
+            const ch = parseInt(document.getElementById("pitchCH").value);
+            
+            document.getElementById("valFB").innerText = fb;
+            document.getElementById("valSL").innerText = sl;
+            document.getElementById("valCB").innerText = cb;
+            document.getElementById("valCH").innerText = ch;
+            
+            const total = fb + sl + cb + ch;
+            document.getElementById("valPitchSum").innerText = total;
+            const sumEl = document.getElementById("valPitchSum");
+            if (total !== 100) {
+                sumEl.style.color = "var(--accent)";
+            } else {
+                sumEl.style.color = "var(--text-muted)";
+            }
+            fetchLineup();
+        }
+
         // GET optimized batting orders and build tables
         async function fetchLineup() {
             const hand = document.getElementById("pitcherHandSelect").value;
+            const armAngle = document.getElementById("pitcherArmSelect").value;
+            const rubber = document.getElementById("pitcherRubberSelect").value;
+            const velocity = document.getElementById("pitcherVelocityInput").value;
+            const command = document.getElementById("pitcherCommandInput").value;
+            const movement = document.getElementById("pitcherMovementInput").value;
+            const windup = document.getElementById("pitcherWindupInput").value;
+            const location = document.getElementById("pitcherLocationSelect").value;
             const leverage = document.getElementById("leverageSelect").value;
+            
+            const fbVal = parseFloat(document.getElementById("pitchFB").value) / 100.0;
+            const slVal = parseFloat(document.getElementById("pitchSL").value) / 100.0;
+            const cbVal = parseFloat(document.getElementById("pitchCB").value) / 100.0;
+            const chVal = parseFloat(document.getElementById("pitchCH").value) / 100.0;
+            const pitchSelection = `Fastball:${fbVal},Slider:${slVal},Curveball:${cbVal},Changeup:${chVal}`;
 
             try {
-                const res = await fetch(`/api/v1/optimize/lineup?opposing_pitcher_handedness=${hand}&situational_leverage=${leverage}`);
+                const queryParams = new URLSearchParams({
+                    opposing_pitcher_handedness: hand,
+                    situational_leverage: leverage,
+                    opposing_pitcher_arm_angle: armAngle,
+                    opposing_pitcher_rubber_position: rubber,
+                    opposing_pitcher_velocity: velocity,
+                    opposing_pitcher_command: command,
+                    opposing_pitcher_movement: movement,
+                    opposing_pitcher_windup_efficiency: windup,
+                    opposing_pitcher_pitch_selection: pitchSelection,
+                    opposing_pitcher_pitch_location: location
+                });
+
+                const res = await fetch(`/api/v1/optimize/lineup?${queryParams.toString()}`);
                 if (!res.ok) throw new Error("Recalculation optimization service failed.");
                 const data = await res.json();
 
@@ -1245,7 +1406,12 @@
 
                     row.innerHTML = `
                         <td><div class="order-badge">${p.batting_order}</div></td>
-                        <td style="font-weight: 600;">${p.name}</td>
+                        <td style="font-weight: 600;">
+                            <div>${p.name}</div>
+                            <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: normal; margin-top: 0.15rem;">
+                                Swing: ${p.typical_swing_angle}° | Speed: ${p.bat_swing_speed}mph | Bat: ${p.bat_size}"/${p.bat_weight}oz | Stance: ${p.stand_in_box}
+                            </div>
+                        </td>
                         <td><span class="pos-badge">${p.position}</span></td>
                         <td><span class="hand-badge">${p.batting_handedness}</span></td>
                         <td class="ops-value">${p.base_ops.toFixed(3)}</td>
@@ -1262,6 +1428,7 @@
 
                 // Populate active batter selection in Tactical Sub Sandbox dropdown
                 const subDropdown = document.getElementById("subActiveBatter");
+                const currentSelectedValue = subDropdown.value;
                 subDropdown.innerHTML = "";
                 data.optimized_lineup.forEach(p => {
                     const opt = document.createElement("option");
@@ -1269,6 +1436,12 @@
                     opt.text = `${p.name} (${p.position}) - Base OPS: ${p.base_ops.toFixed(3)}`;
                     subDropdown.appendChild(opt);
                 });
+                
+                if (currentSelectedValue && [...subDropdown.options].some(o => o.value == currentSelectedValue)) {
+                    subDropdown.value = currentSelectedValue;
+                } else if (data.optimized_lineup.length > 0) {
+                    onActiveBatterChange(data.optimized_lineup[0].player_id);
+                }
 
             } catch (err) {
                 console.error("Optimization failed:", err);
@@ -1280,13 +1453,42 @@
         async function runTacticalSub(event) {
             event.preventDefault();
 
+            const hand = document.getElementById("pitcherHandSelect").value;
+            const armAngle = document.getElementById("pitcherArmSelect").value;
+            const rubber = document.getElementById("pitcherRubberSelect").value;
+            const velocity = parseFloat(document.getElementById("pitcherVelocityInput").value);
+            const command = parseFloat(document.getElementById("pitcherCommandInput").value);
+            const movement = parseFloat(document.getElementById("pitcherMovementInput").value);
+            const windup = parseFloat(document.getElementById("pitcherWindupInput").value);
+            const location = document.getElementById("pitcherLocationSelect").value;
+            
+            const fbVal = parseFloat(document.getElementById("pitchFB").value) / 100.0;
+            const slVal = parseFloat(document.getElementById("pitchSL").value) / 100.0;
+            const cbVal = parseFloat(document.getElementById("pitchCB").value) / 100.0;
+            const chVal = parseFloat(document.getElementById("pitchCH").value) / 100.0;
+            const pitchSelection = `Fastball:${fbVal},Slider:${slVal},Curveball:${cbVal},Changeup:${chVal}`;
+
             const payload = {
                 "inning": parseInt(document.getElementById("subInning").value),
                 "half_inning": document.getElementById("subHalfInning").value,
                 "outs": parseInt(document.getElementById("subOuts").value),
-                "active_pitcher_handedness": document.getElementById("subPitcherHand").value,
+                "active_pitcher_handedness": hand,
                 "run_difference": parseInt(document.getElementById("subRunDifference").value),
-                "active_batter_id": parseInt(document.getElementById("subActiveBatter").value)
+                "active_batter_id": parseInt(document.getElementById("subActiveBatter").value),
+                "runner_on_1b": document.getElementById("runner1B").checked,
+                "runner_on_2b": document.getElementById("runner2B").checked,
+                "runner_on_3b": document.getElementById("runner3B").checked,
+                "pitch_count_in_at_bat": parseInt(document.getElementById("subPitchCount").value),
+                "pitcher_arm_angle": armAngle,
+                "pitcher_rubber_position": rubber,
+                "pitcher_velocity": velocity,
+                "pitcher_command": command,
+                "pitcher_movement": movement,
+                "pitcher_windup_efficiency": windup,
+                "pitcher_pitch_selection": pitchSelection,
+                "pitcher_pitch_location": location,
+                "active_batter_stance_override": document.getElementById("sandboxStance").value,
+                "active_batter_choke_override": parseInt(document.getElementById("sandboxChoke").value)
             };
 
             try {

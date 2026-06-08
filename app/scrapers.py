@@ -16,6 +16,29 @@ except ImportError:
     logger.warning("pybaseball is not installed. Using mock stats generator.")
     PYBASEBALL_AVAILABLE = False
 
+def _get_random_physical_attributes(name: str) -> dict:
+    random.seed(hash(name))
+    swing_angle = round(random.uniform(10.0, 30.0), 1)
+    swing_speed = round(random.uniform(65.0, 80.0), 1)
+    choke_up = 1 if random.random() < 0.2 else 0
+    bat_size = random.choice([32.0, 32.5, 33.0, 33.5, 34.0, 34.5])
+    bat_weight = round(bat_size - random.uniform(2.5, 3.5), 1)
+    stand_in_box = random.choice(["Close", "Middle", "Away"])
+    runners_mod = round(random.uniform(0.005, 0.035), 3)
+    fatigue_rate = round(random.uniform(0.005, 0.02), 3)
+    at_bat_decay = round(random.uniform(0.004, 0.012), 3)
+    return {
+        "typical_swing_angle": swing_angle,
+        "bat_swing_speed": swing_speed,
+        "choke_up": choke_up,
+        "bat_size": bat_size,
+        "bat_weight": bat_weight,
+        "stand_in_box": stand_in_box,
+        "runners_on_base_modifier": runners_mod,
+        "game_progression_fatigue_rate": fatigue_rate,
+        "at_bat_progression_decay": at_bat_decay
+    }
+
 
 def fetch_player_stats_from_pybaseball(first_name: str, last_name: str) -> dict:
     """
@@ -163,6 +186,7 @@ def fetch_team_roster(team_name: str) -> list[dict]:
                     random.seed(hash(name))
                     handedness = random.choice(["L", "R", "S"])
                     
+                    phys = _get_random_physical_attributes(name)
                     players_list.append({
                         "id": fg_id,
                         "name": name,
@@ -173,7 +197,8 @@ def fetch_team_roster(team_name: str) -> list[dict]:
                         "base_ops": ops,
                         "cumulative_days_played": random.randint(0, 7),
                         "disrupted_sleep_hours": round(random.uniform(0.0, 3.5), 1),
-                        "leverage_anxiety_modifier": round(random.uniform(-0.06, -0.01), 3)
+                        "leverage_anxiety_modifier": round(random.uniform(-0.06, -0.01), 3),
+                        **phys
                     })
                 
                 if len(players_list) >= 9:
@@ -264,9 +289,11 @@ def fetch_team_roster(team_name: str) -> list[dict]:
     players_data = []
     for first, last, pos, hand in selected_roster:
         stats = fetch_player_stats_from_pybaseball(first, last)
+        name = f"{first} {last}"
+        phys = _get_random_physical_attributes(name)
         players_data.append({
             "id": stats["mlb_id"],
-            "name": f"{first} {last}",
+            "name": name,
             "position": pos,
             "batting_handedness": hand,
             "base_obp": stats["obp"],
@@ -274,7 +301,8 @@ def fetch_team_roster(team_name: str) -> list[dict]:
             "base_ops": stats["ops"],
             "cumulative_days_played": random.randint(0, 8),
             "disrupted_sleep_hours": round(random.uniform(0.0, 4.0), 1),
-            "leverage_anxiety_modifier": round(random.uniform(-0.08, -0.01), 3)
+            "leverage_anxiety_modifier": round(random.uniform(-0.08, -0.01), 3),
+            **phys
         })
         
     return players_data

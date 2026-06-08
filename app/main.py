@@ -118,19 +118,7 @@ def seed_default_data(db: Session):
     # Ingest Cubs Roster
     cubs_roster = fetch_team_roster("Chicago Cubs")
     for p_data in cubs_roster:
-        player = Player(
-            id=p_data["id"],
-            name=p_data["name"],
-            team_id=112,
-            position=p_data["position"],
-            cumulative_days_played=p_data["cumulative_days_played"],
-            disrupted_sleep_hours=p_data["disrupted_sleep_hours"],
-            leverage_anxiety_modifier=p_data["leverage_anxiety_modifier"],
-            batting_handedness=p_data["batting_handedness"],
-            base_obp=p_data["base_obp"],
-            base_slg=p_data["base_slg"],
-            base_ops=p_data["base_ops"]
-        )
+        player = Player(**p_data, team_id=112)
         db.add(player)
 
     # Seed Boston Red Sox (MLB Team ID: 111)
@@ -167,19 +155,7 @@ def seed_default_data(db: Session):
     # Ingest Red Sox Roster
     redsox_roster = fetch_team_roster("Boston Red Sox")
     for p_data in redsox_roster:
-        player = Player(
-            id=p_data["id"],
-            name=p_data["name"],
-            team_id=111,
-            position=p_data["position"],
-            cumulative_days_played=p_data["cumulative_days_played"],
-            disrupted_sleep_hours=p_data["disrupted_sleep_hours"],
-            leverage_anxiety_modifier=p_data["leverage_anxiety_modifier"],
-            batting_handedness=p_data["batting_handedness"],
-            base_obp=p_data["base_obp"],
-            base_slg=p_data["base_slg"],
-            base_ops=p_data["base_ops"]
-        )
+        player = Player(**p_data, team_id=111)
         db.add(player)
 
     # Set Cubs as active team context initially
@@ -325,19 +301,7 @@ def swap_context(payload: TeamSwapPayload, db: Session = Depends(get_db)):
         logger.info(f"Team {team.name} has no players in local tables. Querying scrapers...")
         roster_players = fetch_team_roster(team.name)
         for p_data in roster_players:
-            player = Player(
-                id=p_data["id"],
-                name=p_data["name"],
-                team_id=team.id,
-                position=p_data["position"],
-                cumulative_days_played=p_data["cumulative_days_played"],
-                disrupted_sleep_hours=p_data["disrupted_sleep_hours"],
-                leverage_anxiety_modifier=p_data["leverage_anxiety_modifier"],
-                batting_handedness=p_data["batting_handedness"],
-                base_obp=p_data["base_obp"],
-                base_slg=p_data["base_slg"],
-                base_ops=p_data["base_ops"]
-            )
+            player = Player(**p_data, team_id=team.id)
             db.add(player)
 
     # 5. Flip the runtime database scope active ID
@@ -395,6 +359,19 @@ def apply_platoon_splits(base_obp: float, base_slg: float, batter_hand: str, pit
 def optimize_lineup(
     opposing_pitcher_handedness: str = Query("R", description="Opposing pitcher handedness: 'L' or 'R'"),
     situational_leverage: str = Query("normal", description="Leverage situation: 'normal' or 'high'"),
+    opposing_pitcher_arm_angle: str = Query("Three-Quarters", description="Pitcher release angle: 'Overhand', 'Three-Quarters', 'Sidearm', 'Submarine'"),
+    opposing_pitcher_rubber_position: str = Query("Middle", description="Rubber stance: 'First Base Side', 'Third Base Side', 'Middle'"),
+    opposing_pitcher_velocity: float = Query(93.0, description="Pitcher velocity in mph"),
+    opposing_pitcher_command: float = Query(0.5, description="Pitcher command (0.0 to 1.0)"),
+    opposing_pitcher_movement: float = Query(0.5, description="Pitcher movement (0.0 to 1.0)"),
+    opposing_pitcher_windup_efficiency: float = Query(0.8, description="Pitcher windup efficiency (0.0 to 1.0)"),
+    opposing_pitcher_pitch_selection: str = Query("Fastball:0.6,Slider:0.2,Curveball:0.1,Changeup:0.1", description="Pitch distribution"),
+    opposing_pitcher_pitch_location: str = Query("Low-Outside", description="Target zone: 'High-Inside', 'Low-Outside', 'Down-Middle', etc."),
+    runner_on_1b: bool = Query(False),
+    runner_on_2b: bool = Query(False),
+    runner_on_3b: bool = Query(False),
+    pitch_count_in_at_bat: int = Query(0),
+    inning: int = Query(1),
     db: Session = Depends(get_db)
 ):
     """
@@ -441,7 +418,34 @@ def optimize_lineup(
             base_park_factor=team.base_park_factor,
             elevation=team.elevation,
             wind_direction=env.wind_direction,
-            wind_velocity=env.wind_velocity
+            wind_velocity=env.wind_velocity,
+            # Batter Physical Parameters
+            typical_swing_angle=player.typical_swing_angle,
+            bat_swing_speed=player.bat_swing_speed,
+            choke_up=player.choke_up,
+            bat_size=player.bat_size,
+            bat_weight=player.bat_weight,
+            stand_in_box=player.stand_in_box,
+            runners_on_base_modifier=player.runners_on_base_modifier,
+            game_progression_fatigue_rate=player.game_progression_fatigue_rate,
+            at_bat_progression_decay=player.at_bat_progression_decay,
+            # Pitcher Parameters
+            pitcher_arm_angle=opposing_pitcher_arm_angle,
+            pitcher_rubber_position=opposing_pitcher_rubber_position,
+            pitcher_velocity=opposing_pitcher_velocity,
+            pitcher_command=opposing_pitcher_command,
+            pitcher_movement=opposing_pitcher_movement,
+            pitcher_windup_efficiency=opposing_pitcher_windup_efficiency,
+            pitcher_pitch_selection=opposing_pitcher_pitch_selection,
+            pitcher_pitch_location=opposing_pitcher_pitch_location,
+            # Situational Context
+            runner_on_1b=runner_on_1b,
+            runner_on_2b=runner_on_2b,
+            runner_on_3b=runner_on_3b,
+            pitch_count_in_at_bat=pitch_count_in_at_bat,
+            inning=inning,
+            batter_handedness=player.batting_handedness,
+            pitcher_handedness=opposing_pitcher_handedness
         )
         
         scored_players.append({
@@ -453,11 +457,35 @@ def optimize_lineup(
             "adjusted_ops": factors["adjusted_ops"],
             "adjusted_obp": factors["adjusted_obp"],
             "adjusted_slg": factors["adjusted_slg"],
+            "typical_swing_angle": player.typical_swing_angle,
+            "bat_swing_speed": player.bat_swing_speed,
+            "choke_up": player.choke_up,
+            "bat_size": player.bat_size,
+            "bat_weight": player.bat_weight,
+            "stand_in_box": player.stand_in_box,
             "factors": {
                 "fatigue_tax": factors["fatigue_tax"],
                 "psych_modifier": factors["psych_modifier"],
                 "ballpark_factor": factors["ballpark_factor"],
-                "wind_bonus_slg": factors["wind_bonus_slg"]
+                "wind_bonus_slg": factors["wind_bonus_slg"],
+                # Details
+                "location_obp_mod": factors.get("location_obp_mod", 1.0),
+                "location_slg_mod": factors.get("location_slg_mod", 1.0),
+                "angle_obp_mod": factors.get("angle_obp_mod", 0.0),
+                "angle_slg_mod": factors.get("angle_slg_mod", 0.0),
+                "inertia_obp_mod": factors.get("inertia_obp_mod", 1.0),
+                "inertia_slg_mod": factors.get("inertia_slg_mod", 1.0),
+                "choke_obp_mod": factors.get("choke_obp_mod", 1.0),
+                "choke_slg_mod": factors.get("choke_slg_mod", 1.0),
+                "box_obp_mod": factors.get("box_obp_mod", 1.0),
+                "box_slg_mod": factors.get("box_slg_mod", 1.0),
+                "windup_timing_mod": factors.get("windup_timing_mod", 1.0),
+                "pitch_sel_obp_mod": factors.get("pitch_sel_obp_mod", 1.0),
+                "pitch_sel_slg_mod": factors.get("pitch_sel_slg_mod", 1.0),
+                "runners_obp_mod": factors.get("runners_obp_mod", 0.0),
+                "game_fatigue": factors.get("game_fatigue", 1.0),
+                "familiarity_bonus": factors.get("familiarity_bonus", 0.0),
+                "at_bat_tracking_bonus": factors.get("at_bat_tracking_bonus", 0.0)
             }
         })
         
@@ -478,7 +506,13 @@ def optimize_lineup(
                 adjusted_ops=sp["adjusted_ops"],
                 adjusted_obp=sp["adjusted_obp"],
                 adjusted_slg=sp["adjusted_slg"],
-                factors=sp["factors"]
+                factors=sp["factors"],
+                typical_swing_angle=sp["typical_swing_angle"],
+                bat_swing_speed=sp["bat_swing_speed"],
+                choke_up=sp["choke_up"],
+                bat_size=sp["bat_size"],
+                bat_weight=sp["bat_weight"],
+                stand_in_box=sp["stand_in_box"]
             )
         )
         
@@ -535,7 +569,34 @@ def tactical_sub(payload: TacticalSubRequest, db: Session = Depends(get_db)):
         base_park_factor=team.base_park_factor,
         elevation=team.elevation,
         wind_direction=env.wind_direction,
-        wind_velocity=env.wind_velocity
+        wind_velocity=env.wind_velocity,
+        # Batter properties
+        typical_swing_angle=active_batter.typical_swing_angle,
+        bat_swing_speed=active_batter.bat_swing_speed,
+        choke_up=payload.active_batter_choke_override if payload.active_batter_choke_override is not None else active_batter.choke_up,
+        bat_size=active_batter.bat_size,
+        bat_weight=active_batter.bat_weight,
+        stand_in_box=payload.active_batter_stance_override if payload.active_batter_stance_override is not None else active_batter.stand_in_box,
+        runners_on_base_modifier=active_batter.runners_on_base_modifier,
+        game_progression_fatigue_rate=active_batter.game_progression_fatigue_rate,
+        at_bat_progression_decay=active_batter.at_bat_progression_decay,
+        # Pitcher properties
+        pitcher_arm_angle=payload.pitcher_arm_angle,
+        pitcher_rubber_position=payload.pitcher_rubber_position,
+        pitcher_velocity=payload.pitcher_velocity,
+        pitcher_command=payload.pitcher_command,
+        pitcher_movement=payload.pitcher_movement,
+        pitcher_windup_efficiency=payload.pitcher_windup_efficiency,
+        pitcher_pitch_selection=payload.pitcher_pitch_selection,
+        pitcher_pitch_location=payload.pitcher_pitch_location,
+        # Situational details
+        runner_on_1b=payload.runner_on_1b,
+        runner_on_2b=payload.runner_on_2b,
+        runner_on_3b=payload.runner_on_3b,
+        pitch_count_in_at_bat=payload.pitch_count_in_at_bat,
+        inning=payload.inning,
+        batter_handedness=active_batter.batting_handedness,
+        pitcher_handedness=payload.active_pitcher_handedness
     )
     
     active_ops_final = active_proj["adjusted_ops"]
@@ -570,7 +631,34 @@ def tactical_sub(payload: TacticalSubRequest, db: Session = Depends(get_db)):
             base_park_factor=team.base_park_factor,
             elevation=team.elevation,
             wind_direction=env.wind_direction,
-            wind_velocity=env.wind_velocity
+            wind_velocity=env.wind_velocity,
+            # Batter properties
+            typical_swing_angle=candidate.typical_swing_angle,
+            bat_swing_speed=candidate.bat_swing_speed,
+            choke_up=candidate.choke_up,
+            bat_size=candidate.bat_size,
+            bat_weight=candidate.bat_weight,
+            stand_in_box=candidate.stand_in_box,
+            runners_on_base_modifier=candidate.runners_on_base_modifier,
+            game_progression_fatigue_rate=candidate.game_progression_fatigue_rate,
+            at_bat_progression_decay=candidate.at_bat_progression_decay,
+            # Pitcher properties
+            pitcher_arm_angle=payload.pitcher_arm_angle,
+            pitcher_rubber_position=payload.pitcher_rubber_position,
+            pitcher_velocity=payload.pitcher_velocity,
+            pitcher_command=payload.pitcher_command,
+            pitcher_movement=payload.pitcher_movement,
+            pitcher_windup_efficiency=payload.pitcher_windup_efficiency,
+            pitcher_pitch_selection=payload.pitcher_pitch_selection,
+            pitcher_pitch_location=payload.pitcher_pitch_location,
+            # Situational details
+            runner_on_1b=payload.runner_on_1b,
+            runner_on_2b=payload.runner_on_2b,
+            runner_on_3b=payload.runner_on_3b,
+            pitch_count_in_at_bat=payload.pitch_count_in_at_bat,
+            inning=payload.inning,
+            batter_handedness=candidate.batting_handedness,
+            pitcher_handedness=payload.active_pitcher_handedness
         )
         
         # Apply Cold-Bench Friction Tax

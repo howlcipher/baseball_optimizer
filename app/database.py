@@ -64,6 +64,19 @@ class Player(Base):
     base_slg = Column(Float, default=0.400)
     base_ops = Column(Float, default=0.720)  # Primary metric we use for core calculations
 
+    # Physical swing and bat parameters
+    typical_swing_angle = Column(Float, default=15.0)
+    bat_swing_speed = Column(Float, default=72.0)
+    choke_up = Column(Integer, default=0)  # 0 or 1
+    bat_size = Column(Float, default=33.0)
+    bat_weight = Column(Float, default=30.0)
+    stand_in_box = Column(String, default="Middle")
+
+    # Situational and game/at-bat progression
+    runners_on_base_modifier = Column(Float, default=0.0)
+    game_progression_fatigue_rate = Column(Float, default=0.01)
+    at_bat_progression_decay = Column(Float, default=0.008)
+
     team = relationship("Team", back_populates="players")
 
 

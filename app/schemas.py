@@ -46,6 +46,15 @@ class PlayerSchema(BaseModel):
     base_obp: float
     base_slg: float
     base_ops: float
+    typical_swing_angle: float
+    bat_swing_speed: float
+    choke_up: int
+    bat_size: float
+    bat_weight: float
+    stand_in_box: str
+    runners_on_base_modifier: float
+    game_progression_fatigue_rate: float
+    at_bat_progression_decay: float
 
     class Config:
         from_attributes = True
@@ -75,7 +84,13 @@ class OptimizedLineupPlayer(BaseModel):
     adjusted_ops: float
     adjusted_obp: float
     adjusted_slg: float
-    factors: dict  # fatigue_tax, psych_modifier, ballpark_factor, wind_bonus_slg
+    factors: dict  # fatigue_tax, psych_modifier, ballpark_factor, wind_bonus_slg, etc.
+    typical_swing_angle: float
+    bat_swing_speed: float
+    choke_up: int
+    bat_size: float
+    bat_weight: float
+    stand_in_box: str
 
 
 class LineupOptimizationResponse(BaseModel):
@@ -92,6 +107,23 @@ class TacticalSubRequest(BaseModel):
     active_batter_id: int = Field(..., description="Player ID of the active batter")
     active_pitcher_handedness: str = Field(..., description="Active pitcher handedness: 'L' or 'R'")
     run_difference: int = Field(..., description="Score differential (batting team score minus fielding team score)")
+    
+    # Additional Simulation Parameters
+    pitcher_arm_angle: str = Field("Three-Quarters", description="Pitcher release angle: 'Overhand', 'Three-Quarters', 'Sidearm', 'Submarine'")
+    pitcher_rubber_position: str = Field("Middle", description="Rubber stance: 'First Base Side', 'Third Base Side', 'Middle'")
+    pitcher_velocity: float = Field(93.0, description="Fastball velocity in mph")
+    pitcher_command: float = Field(0.5, description="Pitcher command rating (0.0 to 1.0)")
+    pitcher_movement: float = Field(0.5, description="Pitcher movement rating (0.0 to 1.0)")
+    pitcher_windup_efficiency: float = Field(0.8, description="Pitcher windup/deception (0.0 to 1.0)")
+    pitcher_pitch_selection: str = Field("Fastball:0.6,Slider:0.2,Curveball:0.1,Changeup:0.1", description="Pitch selection list")
+    pitcher_pitch_location: str = Field("Low-Outside", description="Target zone: 'High-Inside', 'Low-Outside', 'Down-Middle', etc.")
+    
+    runner_on_1b: bool = Field(False, description="Is there a runner on first base?")
+    runner_on_2b: bool = Field(False, description="Is there a runner on second base?")
+    runner_on_3b: bool = Field(False, description="Is there a runner on third base?")
+    pitch_count_in_at_bat: int = Field(0, description="Pitch count in current plate appearance")
+    active_batter_stance_override: Optional[str] = Field(None, description="Active batter stance override: 'Close', 'Middle', 'Away'")
+    active_batter_choke_override: Optional[int] = Field(None, description="Active batter choke override: 0 or 1")
 
 
 class TacticalSubResponse(BaseModel):

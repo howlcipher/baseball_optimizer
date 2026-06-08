@@ -191,3 +191,19 @@ class DefensiveShiftResponse(BaseModel):
     recommended_alignment: str
     reasoning: str
     details: dict
+
+
+class PlayerUpdatePayload(BaseModel):
+    cumulative_days_played: Optional[int] = None
+    disrupted_sleep_hours: Optional[float] = None
+    leverage_anxiety_modifier: Optional[float] = None
+    typical_swing_angle: Optional[float] = None
+    bat_swing_speed: Optional[float] = None
+    choke_up: Optional[int] = None
+    bat_size: Optional[float] = None
+    bat_weight: Optional[float] = None
+    stand_in_box: Optional[str] = None
+    sprint_speed: Optional[float] = None
+    steal_aggression: Optional[float] = None
+    pop_time: Optional[float] = None
+    stamina_pct: Optional[float] = None

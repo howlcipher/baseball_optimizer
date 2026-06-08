@@ -708,6 +708,7 @@
                         </div>
                         
                         <button type="submit" class="btn">Update Live Weather</button>
+                        <button type="button" class="btn" onclick="fetchLiveBallparkWeather()" style="background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); color: var(--text-main); margin-top: 0.5rem; width: 100%;">Fetch Live Weather (Real-Time)</button>
                     </form>
 
                     <div class="stadium-stats">
@@ -1086,6 +1087,93 @@
                     </div>
                 </div>
 
+            </div>
+
+            <!-- ROSTER MANAGER & SANDBOX EDITOR -->
+            <div class="glass-card" style="margin-top: 1.5rem; grid-column: 1 / -1;">
+                <div class="card-header" style="margin-bottom: 1rem;">
+                    <h2>
+                        ⚙️ Roster Manager & Sandbox Editor
+                    </h2>
+                </div>
+                
+                <div class="tactical-grid" style="grid-template-columns: 1fr 1.5fr;">
+                    <!-- Edit Form -->
+                    <form id="rosterEditForm" onsubmit="savePlayerProfile(event)" class="tactical-form">
+                        <div class="input-group full-width">
+                            <label for="editorPlayerSelector">Select Player to Edit</label>
+                            <select id="editorPlayerSelector" onchange="loadPlayerEditorProfile(this.value)" class="team-dropdown" style="width: 100%; min-width: unset;">
+                                <!-- Populated dynamically -->
+                            </select>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label for="editDaysPlayed">Consecutive Days Played</label>
+                            <input type="number" id="editDaysPlayed" min="0" max="162" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="editSleepHours">Sleep Disruption (Hours Loss)</label>
+                            <input type="number" id="editSleepHours" step="0.1" min="0.0" max="10.0" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="editAnxiety">Stress Modifier (Anxiety)</label>
+                            <input type="number" id="editAnxiety" step="0.005" max="0.0" min="-0.2" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="editSwingAngle">Typical Swing Angle (°)</label>
+                            <input type="number" id="editSwingAngle" step="0.5" min="-10.0" max="50.0" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="editSwingSpeed">Bat Swing Speed (mph)</label>
+                            <input type="number" id="editSwingSpeed" step="0.5" min="40.0" max="110.0" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="editSprintSpeed">Sprint Speed (ft/s)</label>
+                            <input type="number" id="editSprintSpeed" step="0.1" min="20.0" max="35.0" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="editStealAggression">Steal Aggression (0.0 - 1.0)</label>
+                            <input type="number" id="editStealAggression" step="0.05" min="0.0" max="1.0" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="editPopTime">Catcher Pop Time (s)</label>
+                            <input type="number" id="editPopTime" step="0.05" min="1.0" max="3.0" required>
+                        </div>
+                        
+                        <div class="full-width" style="margin-top: 0.5rem;">
+                            <button type="submit" class="btn" style="background: linear-gradient(135deg, var(--accent), rgba(var(--accent-rgb), 0.75));">Save Player Profile & Re-Optimize</button>
+                        </div>
+                    </form>
+                    
+                    <!-- Player Current Card Stats Info -->
+                    <div style="background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: center;">
+                        <h3 id="lblEditorPlayerName" style="font-family: 'Outfit', sans-serif; font-size: 1.3rem; margin-bottom: 0.25rem;">Select a Player</h3>
+                        <p id="lblEditorPlayerPos" style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem; text-transform: uppercase; font-weight: 600;">Position Details</p>
+                        
+                        <div class="stadium-stats" style="margin-top: 0; gap: 0.6rem;">
+                            <div class="stadium-stat-row">
+                                <span>Base Performance Baseline</span>
+                                <span id="lblEditorPlayerBaseOps">.720 OPS</span>
+                            </div>
+                            <div class="stadium-stat-row">
+                                <span>Batting Stance / Grip</span>
+                                <span id="lblEditorPlayerStanceGrip">Middle / Normal</span>
+                            </div>
+                            <div class="stadium-stat-row">
+                                <span>Bat Details</span>
+                                <span id="lblEditorPlayerBat">33.0" / 30.0oz</span>
+                            </div>
+                            <div class="stadium-stat-row" style="border-bottom: none; padding-bottom: 0;">
+                                <span>Defensive Framing & OAA</span>
+                                <span id="lblEditorPlayerDefense">OAA: 0 | Framing: 0.5</span>
+                            </div>
+                        </div>
+                        
+                        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 1rem; line-height: 1.3; font-style: italic;">
+                            💡 sandbox editor allows you to simulate changes in consecutive games played, physical characteristics (sprint, swing velocity), or sleep loss to instantly trace their impacts on lineup seeding and live simulator output.
+                        </div>
+                    </div>
+                </div>
             </div>
 
         </div>
@@ -1863,6 +1951,32 @@
                     shiftDropdown.value = currentShiftSel;
                 }
 
+                // Populate Roster Editor selector
+                const editDropdown = document.getElementById("editorPlayerSelector");
+                const currentEditSel = editDropdown.value;
+                editDropdown.innerHTML = "";
+                
+                const ourAllPlayers = allPlayers.filter(p => p.team_id == activeTeamId);
+                
+                ourAllPlayers.forEach(p => {
+                    const opt = document.createElement("option");
+                    opt.value = p.id;
+                    opt.text = `${p.name} (${p.position}) - OBP: .${Math.round(p.base_obp*1000)}`;
+                    editDropdown.appendChild(opt);
+                });
+                
+                window.cachedOurPlayers = ourAllPlayers;
+                
+                if (currentEditSel && [...editDropdown.options].some(o => o.value == currentEditSel)) {
+                    editDropdown.value = currentEditSel;
+                } else if (ourAllPlayers.length > 0) {
+                    editDropdown.value = ourAllPlayers[0].id;
+                }
+                
+                if (editDropdown.value) {
+                    loadPlayerEditorProfile(editDropdown.value);
+                }
+
                 // Initial run once selectors are ready
                 runBullpenOptimization();
                 runStealOptimization();
@@ -2054,6 +2168,87 @@
                 console.error("Shift optimization error:", err);
                 document.getElementById("shiftResults").innerHTML = `<div style="color: var(--accent); font-size: 0.8rem; text-align: center; padding: 1rem;">Alignment Error: ${err.message}</div>`;
             }
+        }
+
+        // Load player detail profile into the editor form inputs
+        function loadPlayerEditorProfile(playerId) {
+            if (!window.cachedOurPlayers) return;
+            const player = window.cachedOurPlayers.find(p => p.id == playerId);
+            if (!player) return;
+
+            document.getElementById("editDaysPlayed").value = player.cumulative_days_played;
+            document.getElementById("editSleepHours").value = player.disrupted_sleep_hours.toFixed(1);
+            document.getElementById("editAnxiety").value = player.leverage_anxiety_modifier.toFixed(3);
+            document.getElementById("editSwingAngle").value = player.typical_swing_angle.toFixed(1);
+            document.getElementById("editSwingSpeed").value = player.bat_swing_speed.toFixed(1);
+            document.getElementById("editSprintSpeed").value = player.sprint_speed.toFixed(1);
+            document.getElementById("editStealAggression").value = player.steal_aggression.toFixed(2);
+            document.getElementById("editPopTime").value = player.pop_time.toFixed(2);
+
+            document.getElementById("lblEditorPlayerName").innerText = player.name;
+            document.getElementById("lblEditorPlayerPos").innerText = `${player.position} (Batting: ${player.batting_handedness})`;
+            document.getElementById("lblEditorPlayerBaseOps").innerText = `Base OBP: .${Math.round(player.base_obp*1000)} | Base SLG: .${Math.round(player.base_slg*1000)} | Base OPS: .${Math.round(player.base_ops*1000)}`;
+            document.getElementById("lblEditorPlayerStanceGrip").innerText = `Natural Stance: ${player.stand_in_box} | Natural Grip: ${player.choke_up === 1 ? 'Choked Up' : 'Normal'}`;
+            document.getElementById("lblEditorPlayerBat").innerText = `${player.bat_size.toFixed(1)}" / ${player.bat_weight.toFixed(1)}oz`;
+            document.getElementById("lblEditorPlayerDefense").innerText = `OAA: ${player.outs_above_average} | Framing: ${player.framing_rating.toFixed(2)}`;
+        }
+
+        // Post sandbox details of player
+        async function savePlayerProfile(event) {
+            event.preventDefault();
+            const playerId = document.getElementById("editorPlayerSelector").value;
+            if (!playerId) return;
+
+            const payload = {
+                "cumulative_days_played": parseInt(document.getElementById("editDaysPlayed").value),
+                "disrupted_sleep_hours": parseFloat(document.getElementById("editSleepHours").value),
+                "leverage_anxiety_modifier": parseFloat(document.getElementById("editAnxiety").value),
+                "typical_swing_angle": parseFloat(document.getElementById("editSwingAngle").value),
+                "bat_swing_speed": parseFloat(document.getElementById("editSwingSpeed").value),
+                "sprint_speed": parseFloat(document.getElementById("editSprintSpeed").value),
+                "steal_aggression": parseFloat(document.getElementById("editStealAggression").value),
+                "pop_time": parseFloat(document.getElementById("editPopTime").value)
+            };
+
+            try {
+                const res = await fetch(`/api/v1/players/${playerId}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) throw new Error("Failed to save player sandbox profile.");
+                
+                alert("Player sandbox profile synchronized successfully.");
+                await fetchConfig();
+
+            } catch (err) {
+                console.error("Save profile error:", err);
+                alert("Profile save error: " + err.message);
+            }
+        }
+
+        // QoL Weather Fetcher Mock
+        function fetchLiveBallparkWeather() {
+            const selectEl = document.getElementById("teamDropdown");
+            const teamId = selectEl.value;
+            
+            const cityWeather = {
+                "112": { temp: 74, humidity: 48, wind: 12, dir: "Out" }, // Cubs/Wrigley
+                "111": { temp: 65, humidity: 62, wind: 8, dir: "In" }, // Red Sox/Fenway
+                "11111": { temp: 71, humidity: 55, wind: 6, dir: "Cross-Right" }, // Yankees/Yankee Stadium
+                "11112": { temp: 78, humidity: 35, wind: 5, dir: "Cross-Left" }, // Dodgers/Dodger Stadium
+                "11113": { temp: 59, humidity: 70, wind: 15, dir: "In" } // Giants/Oracle Park
+            };
+            
+            const weather = cityWeather[teamId] || { temp: 70, humidity: 50, wind: 5, dir: "Cross-Left" };
+            
+            document.getElementById("tempInput").value = weather.temp;
+            document.getElementById("humidityInput").value = weather.humidity;
+            document.getElementById("windVelocityInput").value = weather.wind;
+            document.getElementById("windDirSelect").value = weather.dir;
+            
+            const mockEvent = { preventDefault: () => {} };
+            updateEnvironment(mockEvent);
         }
     </script>
 </body>

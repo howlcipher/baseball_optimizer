@@ -19,7 +19,8 @@ from app.schemas import (
     BullpenOptimizationResponse,
     StealOptimizationResponse,
     DefensiveShiftResponse,
-    PlayerSchema
+    PlayerSchema,
+    PlayerUpdatePayload
 )
 from app.scrapers import fetch_team_roster
 from app.calculator import calculate_true_projection
@@ -368,6 +369,23 @@ def get_players(team_id: Optional[int] = None, position: Optional[str] = None, d
     if position is not None:
         query = query.filter(Player.position.like(f"%{position}%"))
     return query.all()
+
+
+@app.post("/api/v1/players/{player_id}", response_model=PlayerSchema)
+def update_player(player_id: int, payload: PlayerUpdatePayload, db: Session = Depends(get_db)):
+    """
+    Updates physical, mental, and fatigue stats for a player to sandbox new strategies.
+    """
+    player = db.query(Player).filter(Player.id == player_id).first()
+    if not player:
+        raise HTTPException(status_code=404, detail="Player not found")
+        
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(player, key, value)
+        
+    db.commit()
+    db.refresh(player)
+    return player
 
 
 # --- Category II: Tactical Roster Optimization ---

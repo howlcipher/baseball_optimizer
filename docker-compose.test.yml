@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  test-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: test_baseball_optimizer
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d test_baseball_optimizer"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  test-backend:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgresql://test_user:test_password@test-db:5432/test_baseball_optimizer
+      USE_PYBASEBALL: "false"  # Ensure mock-seeding mode is active
+      LOG_LEVEL: "WARNING"
+    depends_on:
+      test-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/config"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  test-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - test-backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  e2e-runner:
+    image: mcr.microsoft.com/playwright/python:v1.40.0-jammy
+    environment:
+      BACKEND_URL: "http://test-backend:8080"
+      FRONTEND_URL: "http://test-frontend:3000"
+      STATIC_FILES_DIR: "/static"
+    volumes:
+      - .:/e2e
+    working_dir: /e2e
+    command: >
+      bash -c "pip install -r requirements-test.txt && 
+               playwright install chromium && 
+               pytest tests/e2e -v"
+    depends_on:
+      test-backend:
+        condition: service_healthy
+      test-frontend:
+        condition: service_healthy
+    networks:
+      - test-network
+
+networks:
+  test-network:
+    driver: bridge

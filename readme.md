@@ -27,7 +27,9 @@ baseball_optimizer/
 │
 ├── tests/
 │   ├── verify.py           # Programmatic ASGI baseline integration test suite
-│   └── verify_advanced.py  # Advanced matchup, physical metrics, tolls, and overrides verification
+│   ├── verify_advanced.py  # Advanced matchup, physical metrics, tolls, and overrides verification
+│   ├── verify_extra.py     # Biophysical, weather, strategic, and baserunning modulators verification
+│   └── e2e/                # E2E test suite (e.g. test_advanced_variables.py)
 │
 ├── logs/
 │   └── baseball_optimizer.log  # Rotating log outputs
@@ -45,6 +47,19 @@ baseball_optimizer/
 Logs are automatically written to `logs/baseball_optimizer.log` utilizing python's `RotatingFileHandler`. 
 * **Backup Strategy**: Logs are limited to a maximum size of **5 MB**, retaining the **3** most recent logs in an active rotatable list.
 * **Console Sync**: Log events are printed to stdout in parallel for immediate CLI monitoring.
+
+### Biophysical & Weather Physics
+* **Dome/Closed Roof weather clamping**: Standardizes temperature to 72.0°F, humidity to 50%, and wind to 0 mph when a roof is closed.
+* **Aerodynamic Drag**: Computes metric air density based on barometric pressure and temperature, applying carry/drag adjustments to the ballpark factor.
+* **Heat Index Fatigue Tax**: Compounds game fatigue by a 1.5x multiplier when game temperature exceeds 85°F and relative humidity exceeds 70%.
+
+### Strategic Matchups
+* **Times Through the Order Penalty (TTOP)**: STARTER pitchers experience progressive command and movement drops on their 2nd (5%), 3rd (12%), and 4th+ (20%) times facing the batting order.
+* **Submarine/Sidearm Platoon Splits**: Left/Right platoon splits are compounded further against submarine and sidearm pitchers.
+* **Twilight visibility glare**: Games starting in twilight (hours 16-18) introduce a sunset glare visibility penalty tracking tax to batter OPS in innings 3 & 4.
+
+### Baserunning Modulators
+* **Hold Runner Rating & Slide step**: Reduces lead-off efficiency and shortens pitcher delivery time, successfully lowering base stealing probability.
 
 ### Color-Themed Responsive Dashboard
 An interactive single-page application is hosted at the root path `/` and supports both **desktop** and **mobile** screen dimensions:
@@ -90,4 +105,12 @@ An interactive single-page application is hosted at the root path `/` and suppor
 4.  **Run Advanced Matchup & Toll Tests**:
     ```bash
     python tests/verify_advanced.py
+    ```
+5.  **Run Biophysical, Weather, & Strategic Modulators Verification**:
+    ```bash
+    python tests/verify_extra.py
+    ```
+6.  **Run E2E Automation Test Suite**:
+    ```bash
+    pytest tests/e2e
     ```

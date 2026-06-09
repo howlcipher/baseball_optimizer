@@ -1,0 +1,5 @@
+pytest
+pytest-playwright
+pytest-asyncio
+httpx
+psycopg2-binary

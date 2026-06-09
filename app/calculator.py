@@ -124,7 +124,13 @@ def calculate_advanced_matchup_factors(
     natural_choke_up: int = None,
     natural_stand_in_box: str = None,
     pitcher_natural_arm_angle: str = "Three-Quarters",
-    pitcher_natural_rubber_position: str = "Middle"
+    pitcher_natural_rubber_position: str = "Middle",
+    temperature: float = 70.0,
+    humidity: float = 50.0,
+    game_hour: int = 19,
+    is_night_game: bool = False,
+    times_faced: int = None,
+    pitcher_type: str = "Starter"
 ) -> dict:
     """
     Calculates advanced biomechanical, physical, and situational matchup modifiers.
@@ -135,6 +141,44 @@ def calculate_advanced_matchup_factors(
     
     is_low = "low" in loc
     is_high = "high" in loc
+    
+    # Calculate game fatigue (with Heat Index modifier)
+    heat_index_modifier = 0.0
+    if temperature > 85.0 and humidity > 70.0:
+        heat_index_modifier = 0.5
+    effective_fatigue_rate = game_progression_fatigue_rate * (1.0 + heat_index_modifier)
+    game_fatigue = 1.0 - (effective_fatigue_rate * max(0, inning - 1))
+    game_fatigue = max(0.80, game_fatigue)
+    
+    # Fatigue decays bat swing speed
+    bat_swing_speed = bat_swing_speed * game_fatigue
+
+    # Times Through the Order Penalty (TTOP)
+    actual_times_faced = times_faced
+    if actual_times_faced is None:
+        if pitcher_type.strip().lower() == "starter":
+            if inning <= 3:
+                actual_times_faced = 1
+            elif inning <= 5:
+                actual_times_faced = 2
+            elif inning <= 7:
+                actual_times_faced = 3
+            else:
+                actual_times_faced = 4
+        else:
+            actual_times_faced = 1
+            
+    ttop_mult = 1.0
+    if pitcher_type.strip().lower() == "starter":
+        if actual_times_faced == 2:
+            ttop_mult = 0.95
+        elif actual_times_faced == 3:
+            ttop_mult = 0.88
+        elif actual_times_faced >= 4:
+            ttop_mult = 0.80
+            
+    pitcher_command = pitcher_command * ttop_mult
+    pitcher_movement = pitcher_movement * ttop_mult
     
     # 0. Pitcher Delivery Slot Control Tolls
     pitcher_control_toll_obp = 0.0
@@ -193,10 +237,12 @@ def calculate_advanced_matchup_factors(
     angle_slg_mod = 0.0
     
     is_side_sub = ("side" in arm or "sub" in arm)
-    is_same_side = (b_hand == p_hand)
+    is_same_side = (b_hand == p_hand) and (b_hand != "S")
     
     if is_side_sub:
         if is_same_side:
+            angle_obp_mod -= 0.03
+            angle_slg_mod -= 0.06
             if (p_hand == "R" and "first" in rubber) or (p_hand == "L" and "third" in rubber):
                 angle_obp_mod -= 0.04
                 angle_slg_mod -= 0.06
@@ -204,6 +250,7 @@ def calculate_advanced_matchup_factors(
                 angle_obp_mod -= 0.02
                 angle_slg_mod -= 0.03
         else:
+            angle_obp_mod += 0.01
             if (p_hand == "R" and "first" in rubber) or (p_hand == "L" and "third" in rubber):
                 angle_obp_mod += 0.02
                 angle_slg_mod += 0.03
@@ -303,8 +350,7 @@ def calculate_advanced_matchup_factors(
             runners_obp_mod += 0.01
 
     # 9. Game & At-Bat Progression
-    game_fatigue = 1.0 - (game_progression_fatigue_rate * max(0, inning - 1))
-    game_fatigue = max(0.80, game_fatigue)
+    # game_fatigue is pre-calculated with Heat Index at the start of the function
     familiarity_bonus = min(0.06, 0.015 * max(0, inning - 1))
     at_bat_tracking_bonus = at_bat_progression_decay * min(8, pitch_count_in_at_bat)
 
@@ -326,8 +372,16 @@ def calculate_advanced_matchup_factors(
         batter_adaptation_slg_mult *= 0.92
         batter_stance_toll_applied = True
 
-    mult_obp = location_obp_mod * inertia_obp_mod * choke_obp_mod * box_obp_mod * windup_timing_mod * pitch_sel_obp_mod * game_fatigue * batter_adaptation_obp_mult
-    mult_slg = location_slg_mod * inertia_slg_mod * choke_slg_mod * box_slg_mod * pitch_sel_slg_mod * game_fatigue * batter_adaptation_slg_mult
+    # Sunset glare lux tracking penalty during twilight games (game_hour 16-18) in innings 3 & 4
+    is_twilight = (16 <= game_hour <= 18)
+    twilight_penalty_obp = 1.0
+    twilight_penalty_slg = 1.0
+    if is_twilight and (3 <= inning <= 4):
+        twilight_penalty_obp = 0.95
+        twilight_penalty_slg = 0.95
+
+    mult_obp = location_obp_mod * inertia_obp_mod * choke_obp_mod * box_obp_mod * windup_timing_mod * pitch_sel_obp_mod * game_fatigue * batter_adaptation_obp_mult * twilight_penalty_obp
+    mult_slg = location_slg_mod * inertia_slg_mod * choke_slg_mod * box_slg_mod * pitch_sel_slg_mod * game_fatigue * batter_adaptation_slg_mult * twilight_penalty_slg
     
     add_obp = angle_obp_mod + runners_obp_mod + familiarity_bonus + at_bat_tracking_bonus + pitcher_control_toll_obp
     add_slg = angle_slg_mod + familiarity_bonus
@@ -363,6 +417,80 @@ def calculate_advanced_matchup_factors(
             "batter_stance_toll_applied": batter_stance_toll_applied,
             "batter_grip_toll_applied": batter_grip_toll_applied
         }
+    }
+
+
+def calculate_environmental_variance(
+    temperature: float,
+    humidity: float,
+    wind_velocity: float,
+    elevation: float,
+    base_park_factor: float,
+    game_id: str = "",
+    barometric_pressure: float = 29.92,
+    is_dome: bool = False,
+    roof_closed: bool = False
+) -> dict:
+    """
+    Calculates the statistical variance and standard deviation for environmental variables
+    based on physics and historical weather/stadium patterns.
+    """
+    import random
+    # Deterministic seed based on game_id to avoid test flakiness
+    seed_val = hash(game_id) if game_id else 42
+    rnd = random.Random(seed_val)
+    
+    if roof_closed:
+        temperature = 72.0
+        humidity = 50.0
+        wind_velocity = 0.0
+        barometric_pressure = 29.92
+        wind_std = 0.0
+        temp_std = 0.0
+        humidity_std = 0.0
+    else:
+        # 1. Wind Gust Variance: scales with velocity.
+        wind_std = wind_velocity * 0.20
+        # 2. Temperature Variance: higher elevation and lower humidity usually mean higher swings.
+        temp_std = 3.0 + (elevation / 2000.0) + (max(0.0, 100.0 - humidity) * 0.05)
+        # 3. Humidity Variance.
+        humidity_std = 5.0 + (temperature * 0.05)
+        
+    wind_var = wind_std ** 2
+    temp_var = temp_std ** 2
+    humidity_var = humidity_std ** 2
+    
+    # 4. Ballpark Factor Variance: air density fluctuations.
+    park_factor_std = 0.015 + (elevation / 10000.0) * 0.005
+    park_factor_var = park_factor_std ** 2
+    
+    # Generate actual simulated values for this game
+    sim_temp = temperature + (rnd.normalvariate(0.0, temp_std) if temp_std > 0 else 0.0)
+    sim_wind = max(0.0, wind_velocity + (rnd.normalvariate(0.0, wind_std) if wind_std > 0 else 0.0))
+    sim_humidity = max(0.0, min(100.0, humidity + (rnd.normalvariate(0.0, humidity_std) if humidity_std > 0 else 0.0)))
+    
+    # Density / drag calculation: ρ ∝ Barometric Pressure / Temperature (K)
+    temp_kelvin = (sim_temp - 32) * (5.0 / 9.0) + 273.15
+    standard_density_metric = 29.92 / 288.15
+    current_density_metric = barometric_pressure / temp_kelvin
+    relative_density = current_density_metric / standard_density_metric
+    drag_adjustment = (1.0 - relative_density) * 0.15
+    
+    sim_park_factor = base_park_factor + drag_adjustment + rnd.normalvariate(0.0, park_factor_std)
+    
+    return {
+        "wind_variance": round(wind_var, 4),
+        "wind_std_dev": round(wind_std, 4),
+        "temperature_variance": round(temp_var, 4),
+        "temperature_std_dev": round(temp_std, 4),
+        "humidity_variance": round(humidity_var, 4),
+        "humidity_std_dev": round(humidity_std, 4),
+        "park_factor_variance": round(park_factor_var, 6),
+        "park_factor_std_dev": round(park_factor_std, 4),
+        "simulated_temperature": round(sim_temp, 2),
+        "simulated_wind_velocity": round(sim_wind, 2),
+        "simulated_humidity": round(sim_humidity, 2),
+        "simulated_park_factor": round(sim_park_factor, 3)
     }
 
 
@@ -416,22 +544,55 @@ def calculate_true_projection(
     
     # Natural pitcher traits (to identify overrides/tolls)
     pitcher_natural_arm_angle: str = "Three-Quarters",
-    pitcher_natural_rubber_position: str = "Middle"
+    pitcher_natural_rubber_position: str = "Middle",
+
+    # New environment arguments for variance/weather support
+    temperature: float = 70.0,
+    humidity: float = 50.0,
+    game_id: str = "",
+    apply_variance: bool = True,
+    barometric_pressure: float = 29.92,
+    is_dome: bool = False,
+    roof_closed: bool = False,
+    game_hour: int = 19,
+    is_night_game: bool = False,
+    times_faced: int = None,
+    pitcher_type: str = "Starter"
 ) -> dict:
     """
-    Calculates the adjusted OBP, SLG, and OPS utilizing a multi-layered biophysical equation.
+    Calculates the adjusted OBP, SLG, and OPS utilizing a multi-layered biophysical equation,
+    integrating environmental variance and weather density adjustments.
     """
+    # Calculate environmental variance
+    var_info = calculate_environmental_variance(
+        temperature=temperature,
+        humidity=humidity,
+        wind_velocity=wind_velocity,
+        elevation=elevation,
+        base_park_factor=base_park_factor,
+        game_id=game_id,
+        barometric_pressure=barometric_pressure,
+        is_dome=is_dome,
+        roof_closed=roof_closed
+    )
+    
+    # Use simulated/varied values if apply_variance is active
+    use_wind_vel = var_info["simulated_wind_velocity"] if apply_variance else wind_velocity
+    use_park_factor = var_info["simulated_park_factor"] if apply_variance else base_park_factor
+    use_temp = var_info["simulated_temperature"] if apply_variance else temperature
+    use_hum = var_info["simulated_humidity"] if apply_variance else humidity
+
     # 1. Biological Fatigue Tax
     fatigue_tax = calculate_biological_fatigue_tax(cumulative_days, fatigue_threshold, disrupted_sleep)
     
     # 2. Psychological Leverage Modifier
     psych_modifier = calculate_psychological_modifier(leverage_scenario, anxiety_modifier, clutch_weight)
     
-    # 3. Ballpark Factor
-    ballpark_factor = calculate_ballpark_factor(base_park_factor, elevation)
+    # 3. Ballpark Factor (incorporating elevation and simulated park factor)
+    ballpark_factor = calculate_ballpark_factor(use_park_factor, elevation)
     
-    # 4. Wind Vector Logic (Slugging specific)
-    wind_bonus = wind_bonus = calculate_wind_vector_bonus(wind_direction, wind_velocity)
+    # 4. Wind Vector Logic (incorporating simulated wind velocity)
+    wind_bonus = calculate_wind_vector_bonus(wind_direction, use_wind_vel)
     
     # 5. Advanced Matchup Factors
     adv = calculate_advanced_matchup_factors(
@@ -462,7 +623,13 @@ def calculate_true_projection(
         natural_choke_up=natural_choke_up if natural_choke_up is not None else choke_up,
         natural_stand_in_box=natural_stand_in_box if natural_stand_in_box is not None else stand_in_box,
         pitcher_natural_arm_angle=pitcher_natural_arm_angle,
-        pitcher_natural_rubber_position=pitcher_natural_rubber_position
+        pitcher_natural_rubber_position=pitcher_natural_rubber_position,
+        temperature=use_temp,
+        humidity=use_hum,
+        game_hour=game_hour,
+        is_night_game=is_night_game,
+        times_faced=times_faced,
+        pitcher_type=pitcher_type
     )
     
     # Compute adjusted OBP
@@ -473,8 +640,39 @@ def calculate_true_projection(
     adj_slg = (base_slg * fatigue_tax * psych_modifier * ballpark_factor * wind_bonus * adv["mult_slg"]) + adv["add_slg"]
     adj_slg = max(0.0, adj_slg)
     
+    # Weather Density Adjustments
+    # Higher temperature -> less dense air -> higher distance/OPS
+    temp_diff = use_temp - 70.0
+    temp_mult = 1.0 + (temp_diff * 0.0008)
+    
+    # Higher humidity -> denser air -> minor reduction
+    hum_diff = use_hum - 50.0
+    hum_mult = 1.0 - (hum_diff * 0.0004)
+    
+    adj_obp = adj_obp * temp_mult * hum_mult
+    adj_slg = adj_slg * temp_mult * hum_mult
+    
+    adj_obp = max(0.0, min(1.0, adj_obp))
+    adj_slg = max(0.0, adj_slg)
+    
     # Compute adjusted OPS
     adj_ops = adj_obp + adj_slg
+    
+    details = adv["details"].copy()
+    details["environmental_variance"] = {
+        "wind_variance": var_info["wind_variance"],
+        "wind_std_dev": var_info["wind_std_dev"],
+        "temperature_variance": var_info["temperature_variance"],
+        "temperature_std_dev": var_info["temperature_std_dev"],
+        "humidity_variance": var_info["humidity_variance"],
+        "humidity_std_dev": var_info["humidity_std_dev"],
+        "park_factor_variance": var_info["park_factor_variance"],
+        "park_factor_std_dev": var_info["park_factor_std_dev"],
+        "simulated_temperature": var_info["simulated_temperature"],
+        "simulated_wind_velocity": var_info["simulated_wind_velocity"],
+        "simulated_humidity": var_info["simulated_humidity"],
+        "simulated_park_factor": var_info["simulated_park_factor"]
+    }
     
     return {
         "adjusted_obp": round(adj_obp, 3),
@@ -484,7 +682,7 @@ def calculate_true_projection(
         "psych_modifier": round(psych_modifier, 3),
         "ballpark_factor": round(ballpark_factor, 3),
         "wind_bonus_slg": round(wind_bonus, 3),
-        **adv["details"]
+        **details
     }
 
 
@@ -494,7 +692,9 @@ def calculate_steal_probability(
     pitcher_velocity: float,
     pitcher_windup_efficiency: float,
     catcher_pop_time: float,
-    target_base: int = 2
+    target_base: int = 2,
+    pitcher_hold_rating: float = 0.0,
+    uses_slide_step: bool = False
 ) -> dict:
     """
     Calculates the steal success probability using biomechanical sprint times vs.
@@ -503,10 +703,11 @@ def calculate_steal_probability(
     import math
     
     # 1. Estimate Runner's Base running travel time (dist 90ft with lead offset)
-    # Average runner speed is 27 ft/s. Distance to second is 90ft, but lead-off is ~12-15ft.
-    # So they run 75-78ft. Reacting takes ~0.3s. Acceleration curve takes time.
-    # T_run model: base run time at 27fps is ~3.25 seconds.
+    # Pitcher hold rating penalty to runner's time (up to 0.30s)
+    hold_penalty = pitcher_hold_rating * 0.30
+    
     base_t_run = 3.8 - (runner_sprint_speed - 23.0) * 0.12 - (runner_steal_aggression * 0.15)
+    base_t_run += hold_penalty
     
     # Stealing third is harder due to shorter catcher pop throw angle
     if target_base == 3:
@@ -516,6 +717,11 @@ def calculate_steal_probability(
     # Pitcher delivery (slide step is around 1.15-1.30s, standard is 1.35-1.6s)
     # Higher velocity slightly reduces pop time/reaction window
     pitch_time = 1.70 - (pitcher_windup_efficiency * 0.45) - ((pitcher_velocity - 90.0) * 0.012)
+    
+    if uses_slide_step:
+        pitch_time -= 0.20
+        pitch_time = max(1.10, min(1.30, pitch_time))
+        
     pitch_time = max(1.10, pitch_time)
     
     defense_time = pitch_time + catcher_pop_time

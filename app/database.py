@@ -1,9 +1,16 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey
+import os
+from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey, Boolean
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
-DATABASE_URL = "sqlite:////run/media/system/tallgeese/dev/baseball_optimizer/baseball_optimizer.db"
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:postgres_password@localhost:5432/baseball_optimizer"
+)
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+if DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+else:
+    engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -16,6 +23,8 @@ class Team(Base):
     stadium_name = Column(String, nullable=False)
     elevation = Column(Float, nullable=False)  # altitude in feet
     base_park_factor = Column(Float, default=1.0)
+    is_dome = Column(Boolean, default=False)
+    roof_closed = Column(Boolean, default=False)
 
     environmental_context = relationship("EnvironmentalContext", back_populates="team", uselist=False, cascade="all, delete-orphan")
     managerial_override = relationship("ManagerialOverride", back_populates="team", uselist=False, cascade="all, delete-orphan")
@@ -31,6 +40,9 @@ class EnvironmentalContext(Base):
     humidity = Column(Float, nullable=False)  # Percentage
     wind_velocity = Column(Float, nullable=False)  # mph
     wind_direction = Column(String, nullable=False)  # "In", "Out", "Cross-Left", "Cross-Right"
+    barometric_pressure = Column(Float, default=29.92)
+    is_night_game = Column(Boolean, default=False)
+    game_hour = Column(Integer, default=19)
 
     team = relationship("Team", back_populates="environmental_context")
 
@@ -80,6 +92,8 @@ class Player(Base):
     # Sprint and baserunning parameters
     sprint_speed = Column(Float, default=27.0)  # ft/sec
     steal_aggression = Column(Float, default=0.5)
+    hold_runner_rating = Column(Float, default=0.0)
+    uses_slide_step = Column(Boolean, default=False)
 
     # Catcher pop time & framing
     pop_time = Column(Float, default=2.0)  # seconds

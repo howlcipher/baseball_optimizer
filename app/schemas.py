@@ -9,6 +9,9 @@ class EnvironmentalContextSchema(BaseModel):
     humidity: float = Field(..., description="Humidity percentage (0 to 100)")
     wind_velocity: float = Field(..., description="Wind speed in mph")
     wind_direction: str = Field(..., description="Wind direction: 'In', 'Out', 'Cross-Left', 'Cross-Right'")
+    barometric_pressure: float = Field(29.92, description="Barometric pressure in inHg")
+    is_night_game: bool = Field(False, description="Is it a night game?")
+    game_hour: int = Field(19, description="Hour of game start (0-23)")
 
     class Config:
         from_attributes = True
@@ -31,6 +34,8 @@ class TeamSwapPayload(BaseModel):
     stadium_name: str = Field(..., description="Name of the stadium")
     elevation: float = Field(..., description="Elevation of stadium in feet")
     base_park_factor: float = Field(1.0, description="Stadium park factor baseline (e.g. 1.0 or 1.05)")
+    is_dome: bool = Field(False, description="Is the stadium a dome?")
+    roof_closed: bool = Field(False, description="Is the retractable roof closed?")
     managerial_override: Optional[ManagerialOverrideSchema] = None
     environmental_context: Optional[EnvironmentalContextSchema] = None
 
@@ -57,6 +62,8 @@ class PlayerSchema(BaseModel):
     at_bat_progression_decay: float
     sprint_speed: float
     steal_aggression: float
+    hold_runner_rating: float = 0.0
+    uses_slide_step: bool = False
     pop_time: float
     framing_rating: float
     outs_above_average: int
@@ -83,9 +90,12 @@ class RuntimeConfigResponse(BaseModel):
     stadium_name: Optional[str] = None
     elevation: Optional[float] = None
     base_park_factor: Optional[float] = None
+    is_dome: Optional[bool] = None
+    roof_closed: Optional[bool] = None
     managerial_override: Optional[ManagerialOverrideSchema] = None
     environmental_context: Optional[EnvironmentalContextSchema] = None
     roster_size: int = 0
+    environmental_variance: Optional[dict] = None
 
 
 class OptimizedLineupPlayer(BaseModel):
@@ -126,6 +136,7 @@ class TacticalSubRequest(BaseModel):
     run_difference: int = Field(..., description="Score differential (batting team score minus fielding team score)")
     
     # Additional Simulation Parameters
+    pitcher_type: str = Field("Starter", description="Pitcher type: 'Starter', 'Reliever', 'Closer'")
     pitcher_arm_angle: str = Field("Three-Quarters", description="Pitcher release angle: 'Overhand', 'Three-Quarters', 'Sidearm', 'Submarine'")
     pitcher_rubber_position: str = Field("Middle", description="Rubber stance: 'First Base Side', 'Third Base Side', 'Middle'")
     pitcher_natural_arm_angle: Optional[str] = Field("Three-Quarters", description="Pitcher natural release angle")
@@ -194,6 +205,8 @@ class DefensiveShiftResponse(BaseModel):
 
 
 class PlayerUpdatePayload(BaseModel):
+    name: Optional[str] = None
+    framing_rating: Optional[float] = None
     cumulative_days_played: Optional[int] = None
     disrupted_sleep_hours: Optional[float] = None
     leverage_anxiety_modifier: Optional[float] = None
@@ -205,5 +218,59 @@ class PlayerUpdatePayload(BaseModel):
     stand_in_box: Optional[str] = None
     sprint_speed: Optional[float] = None
     steal_aggression: Optional[float] = None
+    hold_runner_rating: Optional[float] = None
+    uses_slide_step: Optional[bool] = None
     pop_time: Optional[float] = None
     stamina_pct: Optional[float] = None
+
+
+# --- Series Planner Schemas ---
+
+class GameContextSchema(BaseModel):
+    game_number: int = Field(..., ge=1)
+    temperature: float = Field(70.0)
+    humidity: float = Field(50.0)
+    wind_velocity: float = Field(0.0)
+    wind_direction: str = Field("Out")
+    opposing_pitcher_handedness: str = Field("R")
+    barometric_pressure: float = Field(29.92)
+    is_night_game: bool = Field(False)
+    game_hour: int = Field(19)
+
+class SeriesPlannerRequest(BaseModel):
+    opponent_team_id: int = Field(..., gt=0)
+    series_length: int = Field(..., gt=0)
+    game_contexts: List[GameContextSchema]
+
+class OptimizedSeriesGame(BaseModel):
+    game_number: int
+    suggested_lineup: List[OptimizedLineupPlayer]
+    fatigue_tax_sum: float
+
+class SeriesPlannerResponse(BaseModel):
+    team_id: int
+    optimized_series: List[OptimizedSeriesGame]
+
+
+# --- Pitch Caller Schemas ---
+
+class PitchHistorySchema(BaseModel):
+    pitch_type: str
+    location: str
+    result: str
+
+class PitchCallerRequest(BaseModel):
+    batter_id: int = Field(..., gt=0)
+    pitcher_id: int = Field(..., gt=0)
+    catcher_id: Optional[int] = Field(None, gt=0)
+    previous_pitches: List[PitchHistorySchema]
+    inning: int = Field(1, ge=1)
+    game_hour: int = Field(19, ge=0, le=23)
+
+class PitchCallerResponse(BaseModel):
+    recommended_pitch: str
+    recommended_location: str
+    tunneling_score: float
+    framing_bonus: float
+    success_probability: float
+

@@ -1,4 +1,92 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { QueryClient, QueryClientProvider, useQuery, useMutation } from '@tanstack/react-query';
+import { ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+
+const queryClient = new QueryClient({
+    defaultOptions: {
+        queries: {
+            staleTime: 1000 * 60 * 5, // 5 minutes
+            gcTime: 1000 * 60 * 10, // 10 minutes
+            refetchOnWindowFocus: false,
+            retry: 3,
+        }
+    }
+});
+
+class ErrorBoundary extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = { hasError: false };
+    }
+    static getDerivedStateFromError(error) {
+        return { hasError: true };
+    }
+    componentDidCatch(error, errorInfo) {
+        console.error("ErrorBoundary caught an error", error, errorInfo);
+    }
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-main)' }}>
+                    <h2>⚠️ Something went wrong in the Sabermetric Engine.</h2>
+                    <button className="btn" onClick={() => window.location.reload()}>Reload System</button>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
+
+function SprayChart({ data }) {
+    if (!data || data.length === 0) {
+        return <div className="result-placeholder"><p>No spray chart data available.</p></div>;
+    }
+    return (
+        <div style={{ width: '100%', height: '280px' }} className="spray-chart-container">
+            <ResponsiveContainer width="100%" height="100%">
+                <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--card-border)" />
+                    <XAxis type="number" dataKey="x" name="Horizontal Angle" unit="°" domain={[-90, 90]} stroke="var(--text-muted)" style={{ fontSize: '0.75rem' }} />
+                    <YAxis type="number" dataKey="y" name="Distance" unit="ft" domain={[0, 500]} stroke="var(--text-muted)" style={{ fontSize: '0.75rem' }} />
+                    <ZAxis type="number" dataKey="ops" range={[60, 250]} name="OPS" />
+                    <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: 'var(--bg-dark)', borderColor: 'var(--card-border)', color: 'var(--text-main)' }} />
+                    <Scatter name="Players Spray Hits" data={data} fill="var(--primary)" />
+                </ScatterChart>
+            </ResponsiveContainer>
+        </div>
+    );
+}
+
+function PitchLocationChart({ zone }) {
+    const zoneCoords = {
+        "Low-Outside": { x: 1.5, y: 1.2 },
+        "High-Inside": { x: -1.5, y: 3.8 },
+        "Low-Inside": { x: -1.5, y: 1.2 },
+        "High-Outside": { x: 1.5, y: 3.8 },
+        "Down-Middle": { x: 0, y: 2.5 }
+    };
+    const target = zoneCoords[zone] || { x: 0, y: 2.5 };
+    const data = [
+        { name: 'Target Zone', x: target.x, y: target.y, type: 'Target' },
+        { name: 'Pitch 1', x: target.x + 0.3, y: target.y - 0.2, type: 'Actual' },
+        { name: 'Pitch 2', x: target.x - 0.4, y: target.y + 0.1, type: 'Actual' },
+        { name: 'Pitch 3', x: target.x + 0.1, y: target.y + 0.3, type: 'Actual' }
+    ];
+    return (
+        <div style={{ width: '100%', height: '280px' }} className="pitch-location-chart-container">
+            <ResponsiveContainer width="100%" height="100%">
+                <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--card-border)" />
+                    <XAxis type="number" dataKey="x" name="Horizontal (ft)" domain={[-3, 3]} stroke="var(--text-muted)" style={{ fontSize: '0.75rem' }} />
+                    <YAxis type="number" dataKey="y" name="Vertical (ft)" domain={[0, 6]} stroke="var(--text-muted)" style={{ fontSize: '0.75rem' }} />
+                    <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: 'var(--bg-dark)', borderColor: 'var(--card-border)', color: 'var(--text-main)' }} />
+                    <Scatter name="Target Zone" data={[data[0]]} fill="var(--accent)" shape="circle" />
+                    <Scatter name="Actual Release Locations" data={data.slice(1)} fill="var(--text-muted)" shape="circle" />
+                </ScatterChart>
+            </ResponsiveContainer>
+        </div>
+    );
+}
 
 // Color palettes for teams to update CSS variables on the fly
 const teamColors = {
@@ -167,7 +255,37 @@ const teamPayloads = {
     "11113": { team_id: 11113, name: "San Francisco Giants", location_abbr: "SFG", stadium_name: "Oracle Park", elevation: 10.0, base_park_factor: 0.96 }
 };
 
-export default function App() {
+export function App() {
+    // TanStack Query Hooks for E2E validation, caching, and state management
+    const { data: qConfig, isLoading: qConfigLoading, isError: qConfigError, status: qConfigStatus } = useQuery({
+        queryKey: ['systemConfig', activeTeamId],
+        queryFn: async () => {
+            const res = await fetch("/api/v1/config");
+            if (!res.ok) throw new Error("Network response was not ok");
+            return res.json();
+        },
+        staleTime: 1000 * 60 * 5,
+        refetchOnWindowFocus: true,
+        retry: 3
+    });
+
+    const playerMutation = useMutation({
+        mutationFn: async (updatedPlayer) => {
+            const res = await fetch(`/api/v1/players/${updatedPlayer.id}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(updatedPlayer)
+            });
+            return res.json();
+        },
+        onMutate: async (newPlayer) => {
+            console.log("Optimistic update trigger for player:", newPlayer);
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ['systemConfig'] });
+        }
+    });
+
     const [isDarkMode, setIsDarkMode] = useState(true);
     const [activeTeamId, setActiveTeamId] = useState("112");
     const [config, setConfig] = useState({
@@ -708,6 +826,21 @@ export default function App() {
         runShiftOptimization();
     }, [runShiftOptimization, shiftBatterId, shiftRunnersOnBase, pitcherVel]);
 
+    // Map players to hit spray coordinates based on swing angle and speed
+    const sprayData = (optimizedLineup || []).map(p => {
+        const angleRad = ((p.typical_swing_angle || 15) - 15) * Math.PI / 180;
+        const speed = p.bat_swing_speed || 72;
+        const distance = speed * 4.5;
+        const x = distance * Math.sin(angleRad);
+        const y = distance * Math.cos(angleRad);
+        return {
+            name: p.name,
+            x: Math.round(x),
+            y: Math.round(y),
+            ops: p.adjusted_ops
+        };
+    });
+
     return (
         <div className="container">
             {/* HEADER */}
@@ -794,6 +927,33 @@ export default function App() {
                             </div>
                         </div>
                     </div>
+
+                    {/* WEATHER & PARK FACTOR VARIANCE ANALYSIS */}
+                    {config.environmental_variance && (
+                        <div className="glass-card">
+                            <div className="card-header">
+                                <h2>🌪️ Biophysical Variance Simulation</h2>
+                            </div>
+                            <div className="stadium-stats">
+                                <div className="stadium-stat-row">
+                                    <span>Simulated Temperature</span>
+                                    <strong>{config.environmental_variance.simulated_temperature}°F <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--text-muted)' }}>(±{config.environmental_variance.temperature_std_dev}°F)</span></strong>
+                                </div>
+                                <div className="stadium-stat-row">
+                                    <span>Simulated Wind Velocity</span>
+                                    <strong>{config.environmental_variance.simulated_wind_velocity} mph <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--text-muted)' }}>(±{config.environmental_variance.wind_std_dev} mph)</span></strong>
+                                </div>
+                                <div className="stadium-stat-row">
+                                    <span>Simulated Humidity</span>
+                                    <strong>{config.environmental_variance.simulated_humidity}% <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--text-muted)' }}>(±{config.environmental_variance.humidity_std_dev}%)</span></strong>
+                                </div>
+                                <div className="stadium-stat-row" style={{ borderBottom: 'none', paddingBottom: 0 }}>
+                                    <span>Simulated Park Factor</span>
+                                    <strong>{config.environmental_variance.simulated_park_factor} <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--text-muted)' }}>(±{config.environmental_variance.park_factor_std_dev})</span></strong>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* COACHING PHILOSOPHY OVERRIDES */}
                     <div className="glass-card">
@@ -1011,6 +1171,21 @@ export default function App() {
                                 })}
                             </tbody>
                         </table>
+                    </div>
+                </div>
+
+                {/* ADVANCED BIOMECHANICAL & PITCH CHARTING */}
+                <div className="glass-card" style={{ gridColumn: '1 / -1' }}>
+                    <div className="card-header">
+                        <h2>📊 Advanced Biophysical Visualizations</h2>
+                    </div>
+                    <div className="tactical-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+                        <div style={{ background: 'var(--input-bg)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--card-border)' }}>
+                            <SprayChart data={sprayData} />
+                        </div>
+                        <div style={{ background: 'var(--input-bg)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--card-border)' }}>
+                            <PitchLocationChart zone={pitcherLoc} />
+                        </div>
                     </div>
                 </div>
 
@@ -1531,5 +1706,15 @@ export default function App() {
 
             </div>
         </div>
+    );
+}
+
+export default function AppWrapper() {
+    return (
+        <QueryClientProvider client={queryClient}>
+            <ErrorBoundary>
+                <App />
+            </ErrorBoundary>
+        </QueryClientProvider>
     );
 }

@@ -285,3 +285,16 @@ class PitchCallerResponse(BaseModel):
     framing_bonus: float
     success_probability: float
 
+
+# --- App Settings Schemas ---
+
+class AppSettingsSchema(BaseModel):
+    api_base_url: str
+    database_url: str
+    offline_mode: bool
+    logging_level: str
+    cache_ttl_seconds: int
+    default_team_id: int
+    mock_api_latency_ms: int
+
+

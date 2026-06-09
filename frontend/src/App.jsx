@@ -372,11 +372,237 @@ export function App() {
         sprint_speed: 0.20
     });
 
+    // App Settings State
+    const [apiBaseUrl, setApiBaseUrl] = useState("/api/v1");
+    const [databaseUrl, setDatabaseUrl] = useState("sqlite:///baseball_optimizer.db");
+    const [offlineMode, setOfflineMode] = useState(false);
+    const [loggingLevel, setLoggingLevel] = useState("INFO");
+    const [cacheTtl, setCacheTtl] = useState(3600);
+    const [defaultTeamId, setDefaultTeamId] = useState(112);
+    const [mockLatency, setMockLatency] = useState(100);
+    const [showConfigPanel, setShowConfigPanel] = useState(false);
+
+    // Mock response dictionary
+    const getMockResponse = useCallback((url, options = {}) => {
+        const path = url.split('?')[0];
+        let data = {};
+
+        if (path === "/api/v1/config") {
+            data = {
+                active_team_id: parseInt(activeTeamId) || 112,
+                active_team_name: activeTeamId === "111" ? "Boston Red Sox" : (activeTeamId === "11111" ? "New York Yankees" : (activeTeamId === "11112" ? "Los Angeles Dodgers" : (activeTeamId === "11113" ? "San Francisco Giants" : "Chicago Cubs"))),
+                location_abbr: activeTeamId === "111" ? "BOS" : (activeTeamId === "11111" ? "NYY" : (activeTeamId === "11112" ? "LAD" : (activeTeamId === "11113" ? "SFG" : "CHC"))),
+                stadium_name: activeTeamId === "111" ? "Fenway Park" : (activeTeamId === "11111" ? "Yankee Stadium" : (activeTeamId === "11112" ? "Dodger Stadium" : (activeTeamId === "11113" ? "Oracle Park" : "Wrigley Field"))),
+                elevation: activeTeamId === "111" ? 20.0 : (activeTeamId === "11111" ? 54.0 : (activeTeamId === "11112" ? 270.0 : (activeTeamId === "11113" ? 10.0 : 600.0))),
+                base_park_factor: activeTeamId === "111" ? 1.07 : (activeTeamId === "11111" ? 0.99 : (activeTeamId === "11112" ? 1.01 : (activeTeamId === "11113" ? 0.96 : 1.03))),
+                is_dome: false,
+                roof_closed: false,
+                managerial_override: {
+                    team_id: parseInt(activeTeamId) || 112,
+                    fatigue_threshold: parseInt(fatigueThreshold) || 5,
+                    clutch_weight: parseFloat(clutchWeight) || 1.0,
+                    defensive_sub_inning: parseInt(defInning) || 7,
+                    cold_bench_friction_tax: parseFloat(coldFriction) || 0.15,
+                    enable_manager_observations: enableObservations
+                },
+                environmental_context: {
+                    game_id: "mock_game",
+                    team_id: parseInt(activeTeamId) || 112,
+                    temperature: parseFloat(temp) || 70,
+                    humidity: parseFloat(humidity) || 50,
+                    wind_velocity: parseFloat(windSpeed) || 5,
+                    wind_direction: windDir || "Out",
+                    barometric_pressure: 29.92,
+                    is_night_game: false,
+                    game_hour: 19
+                },
+                roster_size: 9,
+                environmental_variance: {
+                    simulated_temperature: parseFloat(temp) || 70,
+                    temperature_std_dev: 2.5,
+                    simulated_wind_velocity: parseFloat(windSpeed) || 5,
+                    wind_std_dev: 1.2,
+                    simulated_humidity: parseFloat(humidity) || 50,
+                    humidity_std_dev: 4.0,
+                    simulated_park_factor: 1.012,
+                    park_factor_std_dev: 0.015
+                }
+            };
+        } else if (path === "/api/v1/config/swap-context") {
+            data = { success: true };
+        } else if (path === "/api/v1/players") {
+            data = [
+                { id: 1, name: "Ian Happ", position: "LF", batting_handedness: "S", base_obp: 0.343, base_slg: 0.440, base_ops: 0.783, cumulative_days_played: 2, disrupted_sleep_hours: 0, leverage_anxiety_modifier: -0.01, typical_swing_angle: 14.5, bat_swing_speed: 73.2, choke_up: 0, bat_size: 34, bat_weight: 31, stand_in_box: "Middle", sprint_speed: 27.5, steal_aggression: 0.6, hold_runner_rating: 0.2, pop_time: 2.0, stamina_pct: 0.95 },
+                { id: 2, name: "Seiya Suzuki", position: "RF", batting_handedness: "R", base_obp: 0.354, base_slg: 0.485, base_ops: 0.839, cumulative_days_played: 1, disrupted_sleep_hours: 0.5, leverage_anxiety_modifier: -0.02, typical_swing_angle: 15.0, bat_swing_speed: 74.8, choke_up: 0, bat_size: 33.5, bat_weight: 30.5, stand_in_box: "Middle", sprint_speed: 28.1, steal_aggression: 0.5, hold_runner_rating: 0.1, pop_time: 2.0, stamina_pct: 0.90 },
+                { id: 3, name: "Cody Bellinger", position: "CF", batting_handedness: "L", base_obp: 0.356, base_slg: 0.525, base_ops: 0.881, cumulative_days_played: 4, disrupted_sleep_hours: 1.2, leverage_anxiety_modifier: -0.03, typical_swing_angle: 16.5, bat_swing_speed: 75.1, choke_up: 0, bat_size: 33, bat_weight: 30, stand_in_box: "Middle", sprint_speed: 28.8, steal_aggression: 0.7, hold_runner_rating: 0.2, pop_time: 2.0, stamina_pct: 0.85 },
+                { id: 4, name: "Dansby Swanson", position: "SS", batting_handedness: "R", base_obp: 0.328, base_slg: 0.410, base_ops: 0.738, cumulative_days_played: 6, disrupted_sleep_hours: 2.0, leverage_anxiety_modifier: -0.05, typical_swing_angle: 13.8, bat_swing_speed: 71.5, choke_up: 1, bat_size: 33, bat_weight: 30, stand_in_box: "Middle", sprint_speed: 28.2, steal_aggression: 0.4, hold_runner_rating: 0.1, pop_time: 2.0, stamina_pct: 0.75 },
+                { id: 5, name: "Nico Hoerner", position: "2B", batting_handedness: "R", base_obp: 0.346, base_slg: 0.388, base_ops: 0.734, cumulative_days_played: 0, disrupted_sleep_hours: 0, leverage_anxiety_modifier: 0.0, typical_swing_angle: 10.2, bat_swing_speed: 68.9, choke_up: 1, bat_size: 32.5, bat_weight: 29.5, stand_in_box: "Close", sprint_speed: 29.0, steal_aggression: 0.8, hold_runner_rating: 0.3, pop_time: 2.0, stamina_pct: 1.0 },
+                { id: 6, name: "Christopher Morel", position: "DH", batting_handedness: "R", base_obp: 0.313, base_slg: 0.508, base_ops: 0.821, cumulative_days_played: 3, disrupted_sleep_hours: 1.5, leverage_anxiety_modifier: -0.04, typical_swing_angle: 18.2, bat_swing_speed: 78.4, choke_up: 0, bat_size: 34, bat_weight: 31, stand_in_box: "Away", sprint_speed: 28.6, steal_aggression: 0.6, hold_runner_rating: 0.1, pop_time: 2.0, stamina_pct: 0.88 },
+                { id: 7, name: "Justin Steele", position: "P", batting_handedness: "L", base_obp: 0.100, base_slg: 0.100, base_ops: 0.200, cumulative_days_played: 5, disrupted_sleep_hours: 0.5, leverage_anxiety_modifier: -0.01, typical_swing_angle: 12.0, bat_swing_speed: 62.0, choke_up: 0, bat_size: 33, bat_weight: 30, stand_in_box: "Middle", sprint_speed: 24.5, steal_aggression: 0.1, hold_runner_rating: 0.8, pop_time: 2.0, stamina_pct: 0.80 },
+                { id: 8, name: "Miguel Amaya", position: "C", batting_handedness: "R", base_obp: 0.302, base_slg: 0.355, base_ops: 0.657, cumulative_days_played: 1, disrupted_sleep_hours: 0.8, leverage_anxiety_modifier: -0.02, typical_swing_angle: 14.1, bat_swing_speed: 70.2, choke_up: 0, bat_size: 33, bat_weight: 31.5, stand_in_box: "Middle", sprint_speed: 25.2, steal_aggression: 0.2, hold_runner_rating: 0.1, pop_time: 1.95, stamina_pct: 0.92 }
+            ];
+        } else if (path === "/api/v1/optimize/lineup") {
+            data = {
+                team_id: parseInt(activeTeamId) || 112,
+                team_name: activeTeamId === "111" ? "Boston Red Sox" : "Chicago Cubs",
+                optimized_lineup: [
+                    { player_id: 3, name: "Cody Bellinger", batting_order: 1, position: "CF", assigned_position: "CF", batting_handedness: "L", base_ops: 0.881, adjusted_ops: 0.902, stand_in_box: "Middle", optimized_stance: "Middle", choke_up: 0, optimized_choke_up: 0, typical_swing_angle: 16.5, bat_swing_speed: 75.1, bat_size: 33, bat_weight: 30, factors: { fatigue_tax: 1.0, ballpark_factor: 1.012, psych_modifier: 0.98, wind_bonus_slg: 1.0 } },
+                    { player_id: 2, name: "Seiya Suzuki", batting_order: 2, position: "RF", assigned_position: "RF", batting_handedness: "R", base_ops: 0.839, adjusted_ops: 0.851, stand_in_box: "Middle", optimized_stance: "Middle", choke_up: 0, optimized_choke_up: 0, typical_swing_angle: 15.0, bat_swing_speed: 74.8, bat_size: 33.5, bat_weight: 30.5, factors: { fatigue_tax: 1.0, ballpark_factor: 1.012, psych_modifier: 0.99, wind_bonus_slg: 1.0 } },
+                    { player_id: 6, name: "Christopher Morel", batting_order: 3, position: "DH", assigned_position: "DH", batting_handedness: "R", base_ops: 0.821, adjusted_ops: 0.828, stand_in_box: "Away", optimized_stance: "Away", choke_up: 0, optimized_choke_up: 0, typical_swing_angle: 18.2, bat_swing_speed: 78.4, bat_size: 34, bat_weight: 31, factors: { fatigue_tax: 1.0, ballpark_factor: 1.012, psych_modifier: 0.96, wind_bonus_slg: 1.0 } },
+                    { player_id: 1, name: "Ian Happ", batting_order: 4, position: "LF", assigned_position: "LF", batting_handedness: "S", base_ops: 0.783, adjusted_ops: 0.795, stand_in_box: "Middle", optimized_stance: "Middle", choke_up: 0, optimized_choke_up: 0, typical_swing_angle: 14.5, bat_swing_speed: 73.2, bat_size: 34, bat_weight: 31, factors: { fatigue_tax: 1.0, ballpark_factor: 1.012, psych_modifier: 0.99, wind_bonus_slg: 1.0 } },
+                    { player_id: 5, name: "Nico Hoerner", batting_order: 5, position: "2B", assigned_position: "2B", batting_handedness: "R", base_ops: 0.734, adjusted_ops: 0.742, stand_in_box: "Close", optimized_stance: "Close", choke_up: 1, optimized_choke_up: 1, typical_swing_angle: 10.2, bat_swing_speed: 68.9, bat_size: 32.5, bat_weight: 29.5, factors: { fatigue_tax: 1.0, ballpark_factor: 1.012, psych_modifier: 1.0, wind_bonus_slg: 1.0 } },
+                    { player_id: 4, name: "Dansby Swanson", batting_order: 6, position: "SS", assigned_position: "SS", batting_handedness: "R", base_ops: 0.738, adjusted_ops: 0.712, stand_in_box: "Middle", optimized_stance: "Middle", choke_up: 1, optimized_choke_up: 1, typical_swing_angle: 13.8, bat_swing_speed: 71.5, bat_size: 33, bat_weight: 30, factors: { fatigue_tax: 0.98, ballpark_factor: 1.012, psych_modifier: 0.95, wind_bonus_slg: 1.0 } },
+                    { player_id: 8, name: "Miguel Amaya", batting_order: 7, position: "C", assigned_position: "C", batting_handedness: "R", base_ops: 0.657, adjusted_ops: 0.662, stand_in_box: "Middle", optimized_stance: "Middle", choke_up: 0, optimized_choke_up: 0, typical_swing_angle: 14.1, bat_swing_speed: 70.2, bat_size: 33, bat_weight: 31.5, factors: { fatigue_tax: 1.0, ballpark_factor: 1.012, psych_modifier: 0.98, wind_bonus_slg: 1.0 } }
+                ]
+            };
+        } else if (path === "/api/v1/optimize/tactical-sub") {
+            data = {
+                decision: "HOLD",
+                active_player_name: "Dansby Swanson",
+                active_player_adjusted_ops: 0.712,
+                proposed_sub_name: "Nico Hoerner",
+                proposed_sub_adjusted_ops_cold: 0.685,
+                reasoning: "Active batter Dansby Swanson has an expected adjusted OPS of 0.712, which exceeds cold-bench candidate Nico Hoerner's cold projection of 0.685. Hold substitution."
+            };
+        } else if (path === "/api/v1/optimize/bullpen") {
+            data = [
+                { player_id: 201, name: "Adbert Alzolay", arm_angle: "Three-Quarters", stamina_pct: 0.90, ops_against: 0.654, matchup_score: 0.88, reasoning: "Righty reliever Alzolay matches up very well against RHH with high slider utility." },
+                { player_id: 202, name: "Mark Leiter Jr.", arm_angle: "Overhand", stamina_pct: 0.75, ops_against: 0.712, matchup_score: 0.75, reasoning: "Overhand splitter neutralizes LHH splits cleanly." }
+            ];
+        } else if (path === "/api/v1/optimize/steal") {
+            data = {
+                success_probability: 0.78,
+                recommendation: "STEAL",
+                reasoning: "Cody Bellinger has an estimated run time of 3.12s. Pitcher delivery speed plus catcher pop time is 3.32s, creating a positive +0.20s time margin. Green light.",
+                details: {
+                    estimated_run_time: 3.12,
+                    estimated_pitch_delivery_time: 1.32,
+                    time_margin: 0.20
+                }
+            };
+        } else if (path === "/api/v1/optimize/defensive-shift") {
+            data = {
+                batter_name: "Cody Bellinger",
+                typical_swing_angle: 16.5,
+                recommended_alignment: "Pull-Shift",
+                reasoning: "Batter shows heavy pull tendencies. Standard LF/CF/RF depth, shift SS and 2B to right side.",
+                details: {
+                    outfield_depth: "Standard"
+                }
+            };
+        } else if (path === "/api/v1/optimize/pitch-caller") {
+            data = {
+                recommended_pitch: "Slider",
+                recommended_location: "Low-Outside",
+                tunneling_score: 0.82,
+                framing_bonus: 0.015,
+                success_probability: 0.68
+            };
+        } else if (path === "/api/v1/ml/feature-importance") {
+            data = {
+                typical_swing_angle: 0.15,
+                bat_swing_speed: 0.55,
+                bat_weight: 0.10,
+                sprint_speed: 0.20
+            };
+        } else if (path === "/api/v1/app-settings") {
+            data = {
+                api_base_url: apiBaseUrl,
+                database_url: databaseUrl,
+                offline_mode: offlineMode,
+                logging_level: loggingLevel,
+                cache_ttl_seconds: cacheTtl,
+                default_team_id: defaultTeamId,
+                mock_api_latency_ms: mockLatency
+            };
+        } else {
+            data = { success: true };
+        }
+
+        return {
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            json: async () => data
+        };
+    }, [activeTeamId, fatigueThreshold, clutchWeight, defInning, coldFriction, enableObservations, temp, humidity, windSpeed, windDir, apiBaseUrl, databaseUrl, offlineMode, loggingLevel, cacheTtl, defaultTeamId, mockLatency]);
+
+    // Custom fetch wrapper
+    const apiFetch = useCallback(async (url, options = {}) => {
+        if (offlineMode) {
+            if (mockLatency > 0) {
+                await new Promise(r => setTimeout(r, mockLatency));
+            }
+            return getMockResponse(url, options);
+        }
+
+        const relativeUrl = url.replace(/^\/api\/v1/, "");
+        const targetUrl = `${apiBaseUrl}${relativeUrl}`;
+
+        try {
+            const res = await fetch(targetUrl, options);
+            if (!res.ok) {
+                throw new Error(`HTTP Error: ${res.status} ${res.statusText}`);
+            }
+            return res;
+        } catch (err) {
+            console.error("Fetch failed, falling back to mock:", err);
+            return getMockResponse(url, options);
+        }
+    }, [apiBaseUrl, offlineMode, mockLatency, getMockResponse]);
+
+    const fetchAppSettings = useCallback(async () => {
+        try {
+            const res = await fetch("/api/v1/app-settings");
+            if (res.ok) {
+                const data = await res.json();
+                setApiBaseUrl(data.api_base_url || "/api/v1");
+                setDatabaseUrl(data.database_url || "sqlite:///baseball_optimizer.db");
+                setOfflineMode(data.offline_mode || false);
+                setLoggingLevel(data.logging_level || "INFO");
+                setCacheTtl(data.cache_ttl_seconds || 3600);
+                setDefaultTeamId(data.default_team_id || 112);
+                setMockLatency(data.mock_api_latency_ms || 100);
+            }
+        } catch (err) {
+            console.error("Failed to load backend settings, using local settings:", err);
+        }
+    }, []);
+
+    const saveAppSettings = async (e) => {
+        if (e) e.preventDefault();
+        try {
+            if (!offlineMode) {
+                const res = await fetch("/api/v1/app-settings", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        api_base_url: apiBaseUrl,
+                        database_url: databaseUrl,
+                        offline_mode: offlineMode,
+                        logging_level: loggingLevel,
+                        cache_ttl_seconds: cacheTtl,
+                        default_team_id: defaultTeamId,
+                        mock_api_latency_ms: mockLatency
+                    })
+                });
+                if (!res.ok) throw new Error("Failed to save backend app settings.");
+            }
+            alert("Application configuration saved successfully!");
+        } catch (err) {
+            alert(err.message);
+        }
+    };
+
+    useEffect(() => {
+        fetchAppSettings();
+    }, [fetchAppSettings]);
+
     // TanStack Query Hooks for E2E validation, caching, and state management
     const { data: qConfig, isLoading: qConfigLoading, isError: qConfigError, status: qConfigStatus } = useQuery({
         queryKey: ['systemConfig', activeTeamId],
         queryFn: async () => {
-            const res = await fetch("/api/v1/config");
+            const res = await apiFetch("/api/v1/config");
             if (!res.ok) throw new Error("Network response was not ok");
             return res.json();
         },
@@ -387,7 +613,7 @@ export function App() {
 
     const playerMutation = useMutation({
         mutationFn: async (updatedPlayer) => {
-            const res = await fetch(`/api/v1/players/${updatedPlayer.id}`, {
+            const res = await apiFetch(`/api/v1/players/${updatedPlayer.id}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(updatedPlayer)
@@ -422,7 +648,7 @@ export function App() {
     // Load initial setup context
     const fetchConfig = async () => {
         try {
-            const response = await fetch("/api/v1/config");
+            const response = await apiFetch("/api/v1/config");
             if (!response.ok) throw new Error("Could not retrieve active configuration context");
             const data = await response.json();
             setConfig(data);
@@ -474,7 +700,7 @@ export function App() {
         };
 
         try {
-            const res = await fetch("/api/v1/config/swap-context", {
+            const res = await apiFetch("/api/v1/config/swap-context", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)
@@ -514,7 +740,7 @@ export function App() {
         };
 
         try {
-            const res = await fetch("/api/v1/config/swap-context", {
+            const res = await apiFetch("/api/v1/config/swap-context", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)
@@ -547,7 +773,7 @@ export function App() {
                 wind_direction: windDir
             };
 
-            const res = await fetch("/api/v1/config/swap-context", {
+            const res = await apiFetch("/api/v1/config/swap-context", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)
@@ -586,7 +812,7 @@ export function App() {
                 opposing_pitcher_tipping: pitcherTipping
             });
 
-            const res = await fetch(`/api/v1/optimize/lineup?${queryParams.toString()}`);
+            const res = await apiFetch(`/api/v1/optimize/lineup?${queryParams.toString()}`);
             if (!res.ok) throw new Error("Lineup optimization call failed.");
             const data = await res.json();
             const lineup = data.optimized_lineup || [];
@@ -606,7 +832,7 @@ export function App() {
     // Fetch roster directories
     const fetchRosterPlayers = useCallback(async () => {
         try {
-            const res = await fetch("/api/v1/players");
+            const res = await apiFetch("/api/v1/players");
             if (!res.ok) throw new Error("Failed to load players.");
             const allPlayers = await res.json();
 
@@ -723,7 +949,7 @@ export function App() {
         };
 
         try {
-            const res = await fetch("/api/v1/optimize/tactical-sub", {
+            const res = await apiFetch("/api/v1/optimize/tactical-sub", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)
@@ -740,7 +966,7 @@ export function App() {
     const runBullpenOptimization = useCallback(async () => {
         if (!bullpenBatterId) return;
         try {
-            const res = await fetch(`/api/v1/optimize/bullpen?opposing_batter_id=${bullpenBatterId}`);
+            const res = await apiFetch(`/api/v1/optimize/bullpen?opposing_batter_id=${bullpenBatterId}`);
             if (!res.ok) throw new Error("Bullpen optimization failed");
             const data = await res.json();
             setBullpenResults(data.recommendations || []);
@@ -760,7 +986,7 @@ export function App() {
                 pitcher_windup_efficiency: pitcherWindup,
                 catcher_pop_time: stealCatcherPop
             });
-            const res = await fetch(`/api/v1/optimize/steal?${queryParams.toString()}`, {
+            const res = await apiFetch(`/api/v1/optimize/steal?${queryParams.toString()}`, {
                 method: "POST"
             });
             if (!res.ok) throw new Error("Steal simulator failed");
@@ -780,7 +1006,7 @@ export function App() {
                 pitcher_velocity: pitcherVel,
                 runners_on_base: shiftRunnersOnBase
             });
-            const res = await fetch(`/api/v1/optimize/defensive-shift?${queryParams.toString()}`, {
+            const res = await apiFetch(`/api/v1/optimize/defensive-shift?${queryParams.toString()}`, {
                 method: "POST"
             });
             if (!res.ok) throw new Error("Shift optimization failed");
@@ -794,7 +1020,7 @@ export function App() {
     // Load editor player details
     const loadEditorProfileDetails = (playerId) => {
         setEditorPlayerId(playerId);
-        fetch("/api/v1/players")
+        apiFetch("/api/v1/players")
             .then(res => res.json())
             .then(all => {
                 const match = all.find(p => p.id.toString() === playerId);
@@ -827,7 +1053,7 @@ export function App() {
         }
         
         try {
-            const res = await fetch(`/api/v1/players/${dugoutPlayerId}`, {
+            const res = await apiFetch(`/api/v1/players/${dugoutPlayerId}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -857,7 +1083,7 @@ export function App() {
                 inning: parseInt(subInning),
                 game_hour: parseInt(config?.environmental_context?.game_hour || 19)
             };
-            const res = await fetch("/api/v1/optimize/pitch-caller", {
+            const res = await apiFetch("/api/v1/optimize/pitch-caller", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)
@@ -891,7 +1117,7 @@ export function App() {
     // Live ML Explainer Importances Fetcher
     const fetchMlImportances = useCallback(async () => {
         try {
-            const res = await fetch("/api/v1/ml/feature-importance");
+            const res = await apiFetch("/api/v1/ml/feature-importance");
             if (res.ok) {
                 const data = await res.json();
                 setGlobalImportances(data);
@@ -917,7 +1143,7 @@ export function App() {
     const handleSavePlayerProfile = async (e) => {
         e.preventDefault();
         try {
-            const res = await fetch(`/api/v1/players/${editorPlayerId}`, {
+            const res = await apiFetch(`/api/v1/players/${editorPlayerId}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(editorProfile)
@@ -1033,6 +1259,9 @@ export function App() {
                 </div>
                 
                 <div className="team-selector-wrapper">
+                    <button className="theme-toggle-btn" onClick={() => setShowConfigPanel(!showConfigPanel)} style={{ marginRight: '0.5rem' }}>
+                        ⚙️ App Config
+                    </button>
                     <button className="theme-toggle-btn" onClick={toggleTheme}>
                         {isDarkMode ? "🌙 Dark Mode" : "☀️ Light Mode"}
                     </button>
@@ -1050,6 +1279,96 @@ export function App() {
                     </select>
                 </div>
             </header>
+
+            {showConfigPanel && (
+                <div className="glass-card" style={{ marginBottom: '1.5rem', width: '100%', gridColumn: '1 / -1' }}>
+                    <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                        <h2>⚙️ Application Configuration & Settings</h2>
+                        <button className="theme-toggle-btn" onClick={() => setShowConfigPanel(false)} style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}>Close</button>
+                    </div>
+                    <form onSubmit={saveAppSettings} className="config-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+                        <div className="input-group">
+                            <label>Base API URL Prefix</label>
+                            <input 
+                                type="text" 
+                                value={apiBaseUrl} 
+                                onChange={(e) => setApiBaseUrl(e.target.value)} 
+                                placeholder="/api/v1" 
+                                required
+                            />
+                        </div>
+                        <div className="input-group">
+                            <label>Database Connection URI</label>
+                            <input 
+                                type="text" 
+                                value={databaseUrl} 
+                                onChange={(e) => setDatabaseUrl(e.target.value)} 
+                                placeholder="sqlite:///baseball_optimizer.db" 
+                                required
+                            />
+                        </div>
+                        <div className="input-group" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                            <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem', userSelect: 'none', marginTop: '1rem' }}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={offlineMode} 
+                                    onChange={(e) => setOfflineMode(e.target.checked)} 
+                                    style={{ width: 'auto', cursor: 'pointer' }}
+                                />
+                                Offline Mock Mode
+                            </label>
+                        </div>
+                        <div className="input-group">
+                            <label>Mock Latency: {mockLatency} ms</label>
+                            <input 
+                                type="range" 
+                                min="0" 
+                                max="2000" 
+                                step="50" 
+                                value={mockLatency} 
+                                onChange={(e) => setMockLatency(parseInt(e.target.value))}
+                            />
+                        </div>
+                        <div className="input-group">
+                            <label>Logging Severity Level</label>
+                            <select value={loggingLevel} onChange={(e) => setLoggingLevel(e.target.value)}>
+                                <option value="DEBUG">DEBUG</option>
+                                <option value="INFO">INFO</option>
+                                <option value="WARNING">WARNING</option>
+                                <option value="ERROR">ERROR</option>
+                            </select>
+                        </div>
+                        <div className="input-group">
+                            <label>Caching TTL (seconds)</label>
+                            <input 
+                                type="number" 
+                                min="0" 
+                                value={cacheTtl} 
+                                onChange={(e) => setCacheTtl(parseInt(e.target.value) || 0)} 
+                                required
+                            />
+                        </div>
+                        <div className="input-group">
+                            <label>Default Team ID Scope</label>
+                            <select value={defaultTeamId} onChange={(e) => setDefaultTeamId(parseInt(e.target.value))}>
+                                <option value="112">112 (Chicago Cubs)</option>
+                                <option value="111">111 (Boston Red Sox)</option>
+                                <option value="11111">11111 (NY Yankees)</option>
+                                <option value="11112">11112 (LA Dodgers)</option>
+                                <option value="11113">11113 (SF Giants)</option>
+                            </select>
+                        </div>
+                        <div className="full-width" style={{ marginTop: '0.5rem', display: 'flex', gap: '1rem', gridColumn: '1 / -1' }}>
+                            <button type="submit" className="btn" style={{ background: 'linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.75))', flex: 1 }}>
+                                Save App Configuration
+                            </button>
+                            <button type="button" className="btn" onClick={() => setShowConfigPanel(false)} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--card-border)', color: 'var(--text-main)', flex: 1 }}>
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            )}
 
             {/* DASHBOARD GRID */}
             <div className="dashboard-grid">

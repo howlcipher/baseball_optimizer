@@ -2,10 +2,10 @@ import os
 from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey, Boolean
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:postgres_password@localhost:5432/baseball_optimizer"
-)
+from app.config import load_config
+
+config = load_config()
+DATABASE_URL = config["database_url"]
 
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
@@ -13,6 +13,14 @@ else:
     engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+def update_db_engine(new_url: str):
+    global engine, SessionLocal
+    if new_url.startswith("sqlite"):
+        engine = create_engine(new_url, connect_args={"check_same_thread": False})
+    else:
+        engine = create_engine(new_url)
+    SessionLocal.configure(bind=engine)
 
 class Team(Base):
     __tablename__ = "teams"

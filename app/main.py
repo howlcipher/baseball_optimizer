@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import inspect, text
 from typing import List, Optional
 
-from app.database import engine, Base, Team, EnvironmentalContext, ManagerialOverride, Player, SystemState, get_db
+from app.database import engine, Base, Team, EnvironmentalContext, ManagerialOverride, Player, SystemState, get_db, update_db_engine
 from app.schemas import (
     RuntimeConfigResponse,
     TeamSwapPayload,
@@ -28,8 +28,10 @@ from app.schemas import (
     SeriesPlannerResponse,
     OptimizedSeriesGame,
     PitchCallerRequest,
-    PitchCallerResponse
+    PitchCallerResponse,
+    AppSettingsSchema
 )
+from app.config import load_config, save_config
 from app.scrapers import fetch_team_roster
 from app.calculator import calculate_true_projection
 
@@ -487,6 +489,42 @@ def swap_context(payload: TeamSwapPayload, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail=f"Database integrity/uniqueness violation: {e}")
         logger.error(f"Error swapping context: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/app-settings", response_model=AppSettingsSchema)
+def get_app_settings():
+    """
+    Returns the current application settings loaded from app_config.json.
+    """
+    try:
+        return load_config()
+    except Exception as e:
+        logger.error(f"Error loading app settings: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load application settings.")
+
+
+@app.post("/api/v1/app-settings", response_model=AppSettingsSchema)
+def update_app_settings(settings: AppSettingsSchema):
+    """
+    Updates the application settings, saves them to app_config.json, and applies database url swaps dynamically.
+    """
+    try:
+        current_config = load_config()
+        db_changed = current_config.get("database_url") != settings.database_url
+        
+        # Save config
+        new_config = settings.model_dump()
+        save_config(new_config)
+        
+        # Apply database url changes on the fly
+        if db_changed:
+            logger.info(f"Database URL changed. Re-binding engine to: {settings.database_url}")
+            update_db_engine(settings.database_url)
+            
+        return new_config
+    except Exception as e:
+        logger.error(f"Error updating app settings: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update application settings: {e}")
 
 
 # Helper function to apply Sabermetric Platoon splits

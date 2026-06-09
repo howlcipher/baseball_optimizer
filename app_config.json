@@ -1,0 +1,9 @@
+{
+  "api_base_url": "/api/v1",
+  "database_url": "sqlite:///baseball_optimizer.db",
+  "offline_mode": false,
+  "logging_level": "INFO",
+  "cache_ttl_seconds": 3600,
+  "default_team_id": 112,
+  "mock_api_latency_ms": 100
+}

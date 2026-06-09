@@ -130,11 +130,55 @@ def calculate_advanced_matchup_factors(
     game_hour: int = 19,
     is_night_game: bool = False,
     times_faced: int = None,
-    pitcher_type: str = "Starter"
+    pitcher_type: str = "Starter",
+    focus_state: str = "Neutral",
+    swing_path_adjustment: str = "Standard",
+    pitcher_composure: str = "Neutral",
+    is_tipping_pitches: bool = False,
+    enable_manager_observations: bool = False
 ) -> dict:
     """
     Calculates advanced biomechanical, physical, and situational matchup modifiers.
     """
+    manager_obp_add = 0.0
+    manager_slg_add = 0.0
+    
+    if enable_manager_observations:
+        # 1. Pitcher Composure
+        if pitcher_composure.strip().lower() == "cruising":
+            pitcher_command *= 1.10
+            pitcher_movement *= 1.05
+        elif pitcher_composure.strip().lower() == "rattled":
+            pitcher_command *= 0.80
+            pitcher_movement *= 0.90
+            pitcher_velocity = max(50.0, pitcher_velocity - 1.5)
+            
+        # 2. Pitcher Tipping Pitches
+        if is_tipping_pitches:
+            pitcher_command *= 0.85
+            pitcher_movement *= 0.90
+            manager_obp_add += 0.040
+            manager_slg_add += 0.060
+            
+        # 3. Batter Focus State
+        if focus_state.strip().lower() == "locked-in":
+            bat_swing_speed *= 1.05
+            manager_obp_add += 0.030
+        elif focus_state.strip().lower() == "anxious":
+            bat_swing_speed *= 0.95
+            manager_obp_add -= 0.030
+        elif focus_state.strip().lower() == "sluggish":
+            bat_swing_speed *= 0.92
+            manager_obp_add -= 0.015
+            
+        # 4. Swing Path Adjustment
+        if swing_path_adjustment.strip().lower() == "shortened":
+            manager_obp_add += 0.035
+            manager_slg_add -= 0.060
+        elif swing_path_adjustment.strip().lower() == "power cut":
+            manager_obp_add -= 0.045
+            manager_slg_add += 0.090
+
     loc = pitcher_pitch_location.strip().lower()
     location_slg_mod = 1.0
     location_obp_mod = 1.0
@@ -383,8 +427,8 @@ def calculate_advanced_matchup_factors(
     mult_obp = location_obp_mod * inertia_obp_mod * choke_obp_mod * box_obp_mod * windup_timing_mod * pitch_sel_obp_mod * game_fatigue * batter_adaptation_obp_mult * twilight_penalty_obp
     mult_slg = location_slg_mod * inertia_slg_mod * choke_slg_mod * box_slg_mod * pitch_sel_slg_mod * game_fatigue * batter_adaptation_slg_mult * twilight_penalty_slg
     
-    add_obp = angle_obp_mod + runners_obp_mod + familiarity_bonus + at_bat_tracking_bonus + pitcher_control_toll_obp
-    add_slg = angle_slg_mod + familiarity_bonus
+    add_obp = angle_obp_mod + runners_obp_mod + familiarity_bonus + at_bat_tracking_bonus + pitcher_control_toll_obp + manager_obp_add
+    add_slg = angle_slg_mod + familiarity_bonus + manager_slg_add
     
     return {
         "mult_obp": mult_obp,
@@ -392,6 +436,8 @@ def calculate_advanced_matchup_factors(
         "add_obp": add_obp,
         "add_slg": add_slg,
         "details": {
+            "manager_obp_add": round(manager_obp_add, 4),
+            "manager_slg_add": round(manager_slg_add, 4),
             "location_obp_mod": round(location_obp_mod, 3),
             "location_slg_mod": round(location_slg_mod, 3),
             "angle_obp_mod": round(angle_obp_mod, 3),
@@ -557,12 +603,22 @@ def calculate_true_projection(
     game_hour: int = 19,
     is_night_game: bool = False,
     times_faced: int = None,
-    pitcher_type: str = "Starter"
+    pitcher_type: str = "Starter",
+    focus_state: str = "Neutral",
+    swing_path_adjustment: str = "Standard",
+    pitcher_composure: str = "Neutral",
+    is_tipping_pitches: bool = False,
+    enable_manager_observations: bool = False
 ) -> dict:
     """
     Calculates the adjusted OBP, SLG, and OPS utilizing a multi-layered biophysical equation,
     integrating environmental variance and weather density adjustments.
     """
+    if enable_manager_observations:
+        if focus_state.strip().lower() == "locked-in":
+            anxiety_modifier *= 0.5
+        elif focus_state.strip().lower() == "anxious":
+            anxiety_modifier *= 2.0
     # Calculate environmental variance
     var_info = calculate_environmental_variance(
         temperature=temperature,
@@ -629,7 +685,12 @@ def calculate_true_projection(
         game_hour=game_hour,
         is_night_game=is_night_game,
         times_faced=times_faced,
-        pitcher_type=pitcher_type
+        pitcher_type=pitcher_type,
+        focus_state=focus_state,
+        swing_path_adjustment=swing_path_adjustment,
+        pitcher_composure=pitcher_composure,
+        is_tipping_pitches=is_tipping_pitches,
+        enable_manager_observations=enable_manager_observations
     )
     
     # Compute adjusted OBP

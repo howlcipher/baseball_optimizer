@@ -22,6 +22,7 @@ class ManagerialOverrideSchema(BaseModel):
     clutch_weight: float = Field(1.0, description="How heavily clutch modifier scales during leverage spikes")
     defensive_sub_inning: int = Field(7, description="Inning threshold for defensive substitutions")
     cold_bench_friction_tax: float = Field(0.15, description="Decimal penalty deduction for pinch hitters coming off the bench")
+    enable_manager_observations: bool = Field(False, description="Enable manager's scout/feel observations")
 
     class Config:
         from_attributes = True
@@ -76,6 +77,10 @@ class PlayerSchema(BaseModel):
     pitcher_windup_efficiency: float
     pitcher_pitch_selection: str
     stamina_pct: float
+    focus_state: str = "Neutral"
+    swing_path_adjustment: str = "Standard"
+    pitcher_composure: str = "Neutral"
+    is_tipping_pitches: bool = False
 
     class Config:
         from_attributes = True
@@ -154,6 +159,8 @@ class TacticalSubRequest(BaseModel):
     pitch_count_in_at_bat: int = Field(0, description="Pitch count in current plate appearance")
     active_batter_stance_override: Optional[str] = Field(None, description="Active batter stance override: 'Close', 'Middle', 'Away'")
     active_batter_choke_override: Optional[int] = Field(None, description="Active batter choke override: 0 or 1")
+    pitcher_composure: str = Field("Neutral", description="Pitcher composure: 'Cruising', 'Neutral', 'Rattled'")
+    is_tipping_pitches: bool = Field(False, description="Is the pitcher tipping pitches?")
 
 
 class TacticalSubResponse(BaseModel):
@@ -222,6 +229,10 @@ class PlayerUpdatePayload(BaseModel):
     uses_slide_step: Optional[bool] = None
     pop_time: Optional[float] = None
     stamina_pct: Optional[float] = None
+    focus_state: Optional[str] = None
+    swing_path_adjustment: Optional[str] = None
+    pitcher_composure: Optional[str] = None
+    is_tipping_pitches: Optional[bool] = None
 
 
 # --- Series Planner Schemas ---

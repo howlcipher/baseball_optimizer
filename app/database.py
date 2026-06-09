@@ -55,6 +55,7 @@ class ManagerialOverride(Base):
     clutch_weight = Column(Float, default=1.0)
     defensive_sub_inning = Column(Integer, default=7)
     cold_bench_friction_tax = Column(Float, default=0.15)  # pinch hitter penalty
+    enable_manager_observations = Column(Boolean, default=False)
 
     team = relationship("Team", back_populates="managerial_override")
 
@@ -112,6 +113,12 @@ class Player(Base):
     pitcher_windup_efficiency = Column(Float, default=0.8)
     pitcher_pitch_selection = Column(String, default="Fastball:0.6,Slider:0.2,Curveball:0.1,Changeup:0.1")
     stamina_pct = Column(Float, default=1.0)
+
+    # Manager's Eye / Scout Feel Observations
+    focus_state = Column(String, default="Neutral")          # "Locked-In", "Anxious", "Sluggish", "Neutral"
+    swing_path_adjustment = Column(String, default="Standard") # "Shortened", "Power Cut", "Standard"
+    pitcher_composure = Column(String, default="Neutral")      # "Cruising", "Neutral", "Rattled"
+    is_tipping_pitches = Column(Boolean, default=False)
 
     team = relationship("Team", back_populates="players")
 

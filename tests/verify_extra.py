@@ -149,6 +149,80 @@ def test_steal_hold_slide():
     assert steal_slide['success_probability'] < steal_base['success_probability']
     print("SUCCESS: Pitcher hold rating & slide-step delivery verified.")
 
+def test_scout_feel_observations():
+    print("\nTesting Manager's Eye / Scout Feel Observations...")
+    
+    # 1. Pitcher Composure (Cruising vs Rattled)
+    proj_cruising = calculate_true_projection(
+        base_obp=0.320, base_slg=0.400, cumulative_days=0, fatigue_threshold=5, disrupted_sleep=0.0,
+        leverage_scenario="normal", anxiety_modifier=0.0, clutch_weight=1.0, base_park_factor=1.0, elevation=0.0,
+        wind_direction="Out", wind_velocity=0.0, pitcher_command=0.5, pitcher_movement=0.5,
+        pitcher_composure="Cruising", enable_manager_observations=True, apply_variance=False
+    )
+    proj_rattled = calculate_true_projection(
+        base_obp=0.320, base_slg=0.400, cumulative_days=0, fatigue_threshold=5, disrupted_sleep=0.0,
+        leverage_scenario="normal", anxiety_modifier=0.0, clutch_weight=1.0, base_park_factor=1.0, elevation=0.0,
+        wind_direction="Out", wind_velocity=0.0, pitcher_command=0.5, pitcher_movement=0.5,
+        pitcher_composure="Rattled", enable_manager_observations=True, apply_variance=False
+    )
+    print(f"vs Cruising Pitcher Hitter OPS: {proj_cruising['adjusted_ops']:.3f}")
+    print(f"vs Rattled Pitcher Hitter OPS: {proj_rattled['adjusted_ops']:.3f}")
+    assert proj_rattled['adjusted_ops'] > proj_cruising['adjusted_ops'], "Rattled pitcher should yield higher hitter OPS"
+
+    # 2. Pitcher Tipping Pitches
+    proj_tipping = calculate_true_projection(
+        base_obp=0.320, base_slg=0.400, cumulative_days=0, fatigue_threshold=5, disrupted_sleep=0.0,
+        leverage_scenario="normal", anxiety_modifier=0.0, clutch_weight=1.0, base_park_factor=1.0, elevation=0.0,
+        wind_direction="Out", wind_velocity=0.0, pitcher_command=0.5, pitcher_movement=0.5,
+        is_tipping_pitches=True, enable_manager_observations=True, apply_variance=False
+    )
+    proj_normal = calculate_true_projection(
+        base_obp=0.320, base_slg=0.400, cumulative_days=0, fatigue_threshold=5, disrupted_sleep=0.0,
+        leverage_scenario="normal", anxiety_modifier=0.0, clutch_weight=1.0, base_park_factor=1.0, elevation=0.0,
+        wind_direction="Out", wind_velocity=0.0, pitcher_command=0.5, pitcher_movement=0.5,
+        is_tipping_pitches=False, enable_manager_observations=True, apply_variance=False
+    )
+    print(f"vs Tipping Pitcher Hitter OPS: {proj_tipping['adjusted_ops']:.3f}")
+    print(f"vs Normal Pitcher Hitter OPS: {proj_normal['adjusted_ops']:.3f}")
+    assert proj_tipping['adjusted_ops'] > proj_normal['adjusted_ops'], "Tipping pitcher should yield higher hitter OPS"
+
+    # 3. Batter Focus State (Locked-In vs Anxious)
+    proj_locked = calculate_true_projection(
+        base_obp=0.320, base_slg=0.400, cumulative_days=0, fatigue_threshold=5, disrupted_sleep=0.0,
+        leverage_scenario="normal", anxiety_modifier=-0.04, clutch_weight=1.0, base_park_factor=1.0, elevation=0.0,
+        wind_direction="Out", wind_velocity=0.0,
+        focus_state="Locked-In", enable_manager_observations=True, apply_variance=False
+    )
+    proj_anxious = calculate_true_projection(
+        base_obp=0.320, base_slg=0.400, cumulative_days=0, fatigue_threshold=5, disrupted_sleep=0.0,
+        leverage_scenario="normal", anxiety_modifier=-0.04, clutch_weight=1.0, base_park_factor=1.0, elevation=0.0,
+        wind_direction="Out", wind_velocity=0.0,
+        focus_state="Anxious", enable_manager_observations=True, apply_variance=False
+    )
+    print(f"Locked-In Batter OPS: {proj_locked['adjusted_ops']:.3f}")
+    print(f"Anxious Batter OPS: {proj_anxious['adjusted_ops']:.3f}")
+    assert proj_locked['adjusted_ops'] > proj_anxious['adjusted_ops'], "Locked-In batter should outperform Anxious batter"
+
+    # 4. Swing Path Adjustment (Shortened vs Power Cut)
+    proj_shortened = calculate_true_projection(
+        base_obp=0.320, base_slg=0.400, cumulative_days=0, fatigue_threshold=5, disrupted_sleep=0.0,
+        leverage_scenario="normal", anxiety_modifier=0.0, clutch_weight=1.0, base_park_factor=1.0, elevation=0.0,
+        wind_direction="Out", wind_velocity=0.0,
+        swing_path_adjustment="Shortened", enable_manager_observations=True, apply_variance=False
+    )
+    proj_power = calculate_true_projection(
+        base_obp=0.320, base_slg=0.400, cumulative_days=0, fatigue_threshold=5, disrupted_sleep=0.0,
+        leverage_scenario="normal", anxiety_modifier=0.0, clutch_weight=1.0, base_park_factor=1.0, elevation=0.0,
+        wind_direction="Out", wind_velocity=0.0,
+        swing_path_adjustment="Power Cut", enable_manager_observations=True, apply_variance=False
+    )
+    print(f"Shortened Stance Batter OBP: {proj_shortened['adjusted_obp']:.3f}, SLG: {proj_shortened['adjusted_slg']:.3f}")
+    print(f"Power Cut Stance Batter OBP: {proj_power['adjusted_obp']:.3f}, SLG: {proj_power['adjusted_slg']:.3f}")
+    assert proj_shortened['adjusted_obp'] > proj_power['adjusted_obp'], "Shortened swing path should yield higher OBP"
+    assert proj_power['adjusted_slg'] > proj_shortened['adjusted_slg'], "Power Cut swing path should yield higher SLG"
+
+    print("SUCCESS: Manager's Eye / Scout Feel Observations verified.")
+
 def main():
     try:
         test_heat_index()
@@ -158,6 +232,7 @@ def main():
         test_submarine_splits()
         test_twilight_visibility()
         test_steal_hold_slide()
+        test_scout_feel_observations()
         print("\n====================================================")
         print("ALL NEW BIOPHYSICAL AND STRATEGIC MODULATORS VERIFIED!")
         print("====================================================")

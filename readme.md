@@ -61,6 +61,13 @@ Logs are automatically written to `logs/baseball_optimizer.log` utilizing python
 ### Baserunning Modulators
 * **Hold Runner Rating & Slide step**: Reduces lead-off efficiency and shortens pitcher delivery time, successfully lowering base stealing probability.
 
+### Manager's Eye / Scout Feel Observations (Optional Toggle)
+Managers, Coaches, and GMs can toggle and configure qualitative observations that aren't captured by raw statistics:
+* **Pitcher Composure**: Tracks pitcher mental rhythm. `Cruising` boosts command (+10%) and movement (+5%). `Rattled` reduces command (-20%), movement (-10%), and velocity (-1.5 mph).
+* **Pitcher Tipping Pitches**: Indicates if the opposing pitcher is tipping their pitches. When active, batters gain a contact advantage (OBP +0.040, SLG +0.060) and pitcher command/movement drops by 15%/10%.
+* **Batter Focus State**: Reflects hitter dugout presence. `Locked-In` increases swing speed (+5%) and contact (OBP +0.030) while halving anxiety. `Anxious` decreases swing speed (-5%) and contact (OBP -0.030) while doubling anxiety. `Sluggish` decreases swing speed (-8%).
+* **Swing Path Adjustment**: Manual swing adjustments. `Shortened` compact stroke boosts contact (OBP +0.035, SLG -0.060). `Power Cut` big cut swings for carry (OBP -0.045, SLG +0.090).
+
 ### Color-Themed Responsive Dashboard
 An interactive single-page application is hosted at the root path `/` and supports both **desktop** and **mobile** screen dimensions:
 * **Interactive Controls**: Forms to adjust stadium weather patterns (temp, wind, direction), philosophy overrides (fatigue caps, friction tax), and active/natural delivery patterns of opposing pitchers.

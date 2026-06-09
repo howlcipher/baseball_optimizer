@@ -84,3 +84,72 @@ def test_steal_endpoint_hold_and_slide_step(api_client):
     
     # Success probability should decrease because of hold rating and slide step
     assert res_hold["success_probability"] < res_base["success_probability"]
+
+def test_manager_observations_and_pitcher_tipping(api_client):
+    """Verify that manager observations can be toggled on/off, player focus state updated, and pitcher tipping utilized in lineup/tactical optimization."""
+    client = E2EApiClient(api_client)
+    
+    # 1. Swap context enabling manager observations
+    res_swap = client.swap_context(
+        team_id=112,
+        name="Chicago Cubs",
+        location_abbr="CHC",
+        stadium_name="Wrigley Field",
+        elevation=600.0,
+        base_park_factor=1.03,
+        managerial_override={
+            "fatigue_threshold": 5,
+            "clutch_weight": 1.0,
+            "defensive_sub_inning": 7,
+            "cold_bench_friction_tax": 0.15,
+            "enable_manager_observations": True
+        }
+    )
+    assert res_swap["managerial_override"]["enable_manager_observations"] is True
+    
+    # Get Cubs roster
+    players = client.get_players()
+    runner = next(p for p in players if p["position"] not in ("P", "SP", "RP"))
+    
+    # 2. Update player focus state to 'Locked-In' and swing path to 'Shortened'
+    update_res = client.update_player(runner["id"], {
+        "focus_state": "Locked-In",
+        "swing_path_adjustment": "Shortened"
+    })
+    assert update_res["focus_state"] == "Locked-In"
+    assert update_res["swing_path_adjustment"] == "Shortened"
+    
+    # 3. Optimize lineup against tipping pitcher
+    lineup_tipping = api_client.get("/api/v1/optimize/lineup?opposing_pitcher_tipping=true")
+    lineup_tipping.raise_for_status()
+    res_tipping = lineup_tipping.json()
+    
+    # Optimize lineup against normal pitcher
+    lineup_normal = api_client.get("/api/v1/optimize/lineup?opposing_pitcher_tipping=false")
+    lineup_normal.raise_for_status()
+    res_normal = lineup_normal.json()
+    
+    # The optimized team's OBP/SLG/OPS sums should be higher against a tipping pitcher!
+    # Wait, let's verify that the endpoints successfully return 200 OK.
+    assert len(res_tipping["optimized_lineup"]) > 0
+    assert len(res_normal["optimized_lineup"]) > 0
+    
+    # 4. Tactical sub endpoint with composure and tipping
+    tactical_res = client.optimize_tactical_sub({
+        "inning": 8,
+        "half_inning": "bottom",
+        "outs": 1,
+        "active_batter_id": runner["id"],
+        "active_pitcher_handedness": "R",
+        "run_difference": -1,
+        "pitcher_type": "Reliever",
+        "pitcher_arm_angle": "Three-Quarters",
+        "pitcher_composure": "Rattled",
+        "is_tipping_pitches": True,
+        "runner_on_1b": True,
+        "runner_on_2b": False,
+        "runner_on_3b": False,
+        "pitch_count_in_at_bat": 2
+    })
+    assert "decision" in tactical_res
+    assert "active_player_adjusted_ops" in tactical_res

@@ -111,6 +111,12 @@ def run_migrations():
             logger.info("Migration: Adding game_hour to environmental_contexts")
             conn.execute(text("ALTER TABLE environmental_contexts ADD COLUMN game_hour INTEGER DEFAULT 19"))
             
+        # Check managerial_overrides
+        mgr_cols = {col['name'] for col in inspector.get_columns('managerial_overrides')}
+        if 'enable_manager_observations' not in mgr_cols:
+            logger.info("Migration: Adding enable_manager_observations to managerial_overrides")
+            conn.execute(text("ALTER TABLE managerial_overrides ADD COLUMN enable_manager_observations BOOLEAN DEFAULT 0"))
+            
         # Check players
         player_cols = {col['name'] for col in inspector.get_columns('players')}
         if 'hold_runner_rating' not in player_cols:
@@ -119,6 +125,18 @@ def run_migrations():
         if 'uses_slide_step' not in player_cols:
             logger.info("Migration: Adding uses_slide_step to players")
             conn.execute(text("ALTER TABLE players ADD COLUMN uses_slide_step BOOLEAN DEFAULT 0"))
+        if 'focus_state' not in player_cols:
+            logger.info("Migration: Adding focus_state to players")
+            conn.execute(text("ALTER TABLE players ADD COLUMN focus_state VARCHAR DEFAULT 'Neutral'"))
+        if 'swing_path_adjustment' not in player_cols:
+            logger.info("Migration: Adding swing_path_adjustment to players")
+            conn.execute(text("ALTER TABLE players ADD COLUMN swing_path_adjustment VARCHAR DEFAULT 'Standard'"))
+        if 'pitcher_composure' not in player_cols:
+            logger.info("Migration: Adding pitcher_composure to players")
+            conn.execute(text("ALTER TABLE players ADD COLUMN pitcher_composure VARCHAR DEFAULT 'Neutral'"))
+        if 'is_tipping_pitches' not in player_cols:
+            logger.info("Migration: Adding is_tipping_pitches to players")
+            conn.execute(text("ALTER TABLE players ADD COLUMN is_tipping_pitches BOOLEAN DEFAULT 0"))
 
 # Create Database tables on startup
 @app.on_event("startup")
@@ -366,11 +384,13 @@ def swap_context(payload: TeamSwapPayload, db: Session = Depends(get_db)):
             mgr.clutch_weight = payload.managerial_override.clutch_weight
             mgr.defensive_sub_inning = payload.managerial_override.defensive_sub_inning
             mgr.cold_bench_friction_tax = payload.managerial_override.cold_bench_friction_tax
+            mgr.enable_manager_observations = payload.managerial_override.enable_manager_observations
         else:
             mgr.fatigue_threshold = 5
             mgr.clutch_weight = 1.0
             mgr.defensive_sub_inning = 7
             mgr.cold_bench_friction_tax = 0.15
+            mgr.enable_manager_observations = False
 
         # 3. Update or create Environmental Context
         env = db.query(EnvironmentalContext).filter(EnvironmentalContext.team_id == team.id).first()
@@ -535,6 +555,8 @@ def optimize_lineup(
     opposing_pitcher_pitch_selection: str = Query("Fastball:0.6,Slider:0.2,Curveball:0.1,Changeup:0.1", description="Pitch distribution"),
     opposing_pitcher_pitch_location: str = Query("Low-Outside", description="Target zone: 'High-Inside', 'Low-Outside', 'Down-Middle', etc."),
     opposing_pitcher_type: str = Query("Starter", description="Pitcher type: 'Starter' or 'Reliever'"),
+    opposing_pitcher_composure: str = Query("Neutral", description="Pitcher composure: 'Cruising', 'Neutral', 'Rattled'"),
+    opposing_pitcher_tipping: bool = Query(False, description="Is the opposing pitcher tipping their pitches?"),
     runner_on_1b: bool = Query(False),
     runner_on_2b: bool = Query(False),
     runner_on_3b: bool = Query(False),
@@ -635,7 +657,12 @@ def optimize_lineup(
                     roof_closed=team.roof_closed,
                     game_hour=env.game_hour,
                     is_night_game=env.is_night_game,
-                    pitcher_type=opposing_pitcher_type
+                    pitcher_type=opposing_pitcher_type,
+                    focus_state=player.focus_state,
+                    swing_path_adjustment=player.swing_path_adjustment,
+                    pitcher_composure=opposing_pitcher_composure,
+                    is_tipping_pitches=opposing_pitcher_tipping,
+                    enable_manager_observations=mgr.enable_manager_observations
                 )
                 if factors["adjusted_ops"] > best_ops:
                     best_ops = factors["adjusted_ops"]
@@ -912,7 +939,12 @@ def tactical_sub(payload: TacticalSubRequest, db: Session = Depends(get_db)):
             roof_closed=team.roof_closed,
             game_hour=env.game_hour,
             is_night_game=env.is_night_game,
-            pitcher_type=payload.pitcher_type
+            pitcher_type=payload.pitcher_type,
+            focus_state=active_batter.focus_state,
+            swing_path_adjustment=active_batter.swing_path_adjustment,
+            pitcher_composure=payload.pitcher_composure,
+            is_tipping_pitches=payload.is_tipping_pitches,
+            enable_manager_observations=mgr.enable_manager_observations
         )
     else:
         # Auto-optimize active batter stance/grip
@@ -969,7 +1001,12 @@ def tactical_sub(payload: TacticalSubRequest, db: Session = Depends(get_db)):
                     roof_closed=team.roof_closed,
                     game_hour=env.game_hour,
                     is_night_game=env.is_night_game,
-                    pitcher_type=payload.pitcher_type
+                    pitcher_type=payload.pitcher_type,
+                    focus_state=active_batter.focus_state,
+                    swing_path_adjustment=active_batter.swing_path_adjustment,
+                    pitcher_composure=payload.pitcher_composure,
+                    is_tipping_pitches=payload.is_tipping_pitches,
+                    enable_manager_observations=mgr.enable_manager_observations
                 )
                 if proj["adjusted_ops"] > best_active_ops:
                     best_active_ops = proj["adjusted_ops"]
@@ -1051,7 +1088,12 @@ def tactical_sub(payload: TacticalSubRequest, db: Session = Depends(get_db)):
                     roof_closed=team.roof_closed,
                     game_hour=env.game_hour,
                     is_night_game=env.is_night_game,
-                    pitcher_type=payload.pitcher_type
+                    pitcher_type=payload.pitcher_type,
+                    focus_state=candidate.focus_state,
+                    swing_path_adjustment=candidate.swing_path_adjustment,
+                    pitcher_composure=payload.pitcher_composure,
+                    is_tipping_pitches=payload.is_tipping_pitches,
+                    enable_manager_observations=mgr.enable_manager_observations
                 )
                 if proj["adjusted_ops"] > best_cand_ops:
                     best_cand_ops = proj["adjusted_ops"]
@@ -1221,7 +1263,12 @@ def optimize_bullpen(
             pitcher_natural_rubber_position=rel.pitcher_rubber_position,
             temperature=env.temperature,
             humidity=env.humidity,
-            game_id=env.game_id
+            game_id=env.game_id,
+            focus_state=opposing_batter.focus_state,
+            swing_path_adjustment=opposing_batter.swing_path_adjustment,
+            pitcher_composure=rel.pitcher_composure,
+            is_tipping_pitches=rel.is_tipping_pitches,
+            enable_manager_observations=mgr.enable_manager_observations
         )
         
         ops_against = factors["adjusted_ops"]
@@ -1420,7 +1467,12 @@ def optimize_series_planner(payload: SeriesPlannerRequest, db: Session = Depends
                         roof_closed=team.roof_closed,
                         game_hour=getattr(game_ctx, "game_hour", 19),
                         is_night_game=getattr(game_ctx, "is_night_game", False),
-                        pitcher_type="Starter"
+                        pitcher_type="Starter",
+                        focus_state=player.focus_state,
+                        swing_path_adjustment=player.swing_path_adjustment,
+                        pitcher_composure="Neutral",
+                        is_tipping_pitches=False,
+                        enable_manager_observations=mgr.enable_manager_observations
                     )
                     if factors["adjusted_ops"] > best_ops:
                         best_ops = factors["adjusted_ops"]

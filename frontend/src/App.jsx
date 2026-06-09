@@ -256,36 +256,6 @@ const teamPayloads = {
 };
 
 export function App() {
-    // TanStack Query Hooks for E2E validation, caching, and state management
-    const { data: qConfig, isLoading: qConfigLoading, isError: qConfigError, status: qConfigStatus } = useQuery({
-        queryKey: ['systemConfig', activeTeamId],
-        queryFn: async () => {
-            const res = await fetch("/api/v1/config");
-            if (!res.ok) throw new Error("Network response was not ok");
-            return res.json();
-        },
-        staleTime: 1000 * 60 * 5,
-        refetchOnWindowFocus: true,
-        retry: 3
-    });
-
-    const playerMutation = useMutation({
-        mutationFn: async (updatedPlayer) => {
-            const res = await fetch(`/api/v1/players/${updatedPlayer.id}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(updatedPlayer)
-            });
-            return res.json();
-        },
-        onMutate: async (newPlayer) => {
-            console.log("Optimistic update trigger for player:", newPlayer);
-        },
-        onSettled: () => {
-            queryClient.invalidateQueries({ queryKey: ['systemConfig'] });
-        }
-    });
-
     const [isDarkMode, setIsDarkMode] = useState(true);
     const [activeTeamId, setActiveTeamId] = useState("112");
     const [config, setConfig] = useState({
@@ -374,6 +344,65 @@ export function App() {
     });
     const [selectedPlayerDetail, setSelectedPlayerDetail] = useState(null);
 
+    // NEW STATES FOR COACH/SCOUT PANELS:
+    const [enableObservations, setEnableObservations] = useState(false);
+    const [pitcherComposure, setPitcherComposure] = useState("Neutral");
+    const [pitcherTipping, setPitcherTipping] = useState(false);
+
+    const [dugoutPlayerId, setDugoutPlayerId] = useState("");
+    const [dugoutFocusState, setDugoutFocusState] = useState("Neutral");
+    const [dugoutSwingPath, setDugoutSwingPath] = useState("Standard");
+
+    const [ourPitchers, setOurPitchers] = useState([]);
+    const [ourCatchers, setOurCatchers] = useState([]);
+    const [tunnelBatterId, setTunnelBatterId] = useState("");
+    const [tunnelPitcherId, setTunnelPitcherId] = useState("");
+    const [tunnelCatcherId, setTunnelCatcherId] = useState("");
+    const [previousPitches, setPreviousPitches] = useState([]);
+    const [tunnelResult, setTunnelResult] = useState(null);
+    const [newPitchType, setNewPitchType] = useState("Fastball");
+    const [newPitchLoc, setNewPitchLoc] = useState("Low-Outside");
+    const [newPitchResult, setNewPitchResult] = useState("Strike");
+
+    const [mlPlayerId, setMlPlayerId] = useState("");
+    const [globalImportances, setGlobalImportances] = useState({
+        typical_swing_angle: 0.15,
+        bat_swing_speed: 0.55,
+        bat_weight: 0.10,
+        sprint_speed: 0.20
+    });
+
+    // TanStack Query Hooks for E2E validation, caching, and state management
+    const { data: qConfig, isLoading: qConfigLoading, isError: qConfigError, status: qConfigStatus } = useQuery({
+        queryKey: ['systemConfig', activeTeamId],
+        queryFn: async () => {
+            const res = await fetch("/api/v1/config");
+            if (!res.ok) throw new Error("Network response was not ok");
+            return res.json();
+        },
+        staleTime: 1000 * 60 * 5,
+        refetchOnWindowFocus: true,
+        retry: 3
+    });
+
+    const playerMutation = useMutation({
+        mutationFn: async (updatedPlayer) => {
+            const res = await fetch(`/api/v1/players/${updatedPlayer.id}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(updatedPlayer)
+            });
+            return res.json();
+        },
+        onMutate: async (newPlayer) => {
+            console.log("Optimistic update trigger for player:", newPlayer);
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ['systemConfig'] });
+        }
+    });
+
+
     // Helper: Apply CSS variables dynamically
     const applyColors = useCallback((teamId, modeDark) => {
         const teamData = teamColors[teamId] || teamColors["112"];
@@ -411,6 +440,7 @@ export function App() {
                 setClutchWeight(data.managerial_override.clutch_weight);
                 setDefInning(data.managerial_override.defensive_sub_inning);
                 setColdFriction(data.managerial_override.cold_bench_friction_tax);
+                setEnableObservations(data.managerial_override.enable_manager_observations || false);
             }
         } catch (err) {
             console.error("Config fetch error:", err);
@@ -431,7 +461,8 @@ export function App() {
                 fatigue_threshold: fatigueThreshold,
                 clutch_weight: clutchWeight,
                 defensive_sub_inning: defInning,
-                cold_bench_friction_tax: coldFriction
+                cold_bench_friction_tax: coldFriction,
+                enable_manager_observations: enableObservations
             },
             environmental_context: {
                 game_id: `GAME_${activeTeamId}_2026`,
@@ -470,7 +501,8 @@ export function App() {
                 fatigue_threshold: parseInt(fatigueThreshold),
                 clutch_weight: parseFloat(clutchWeight),
                 defensive_sub_inning: parseInt(defInning),
-                cold_bench_friction_tax: parseFloat(coldFriction)
+                cold_bench_friction_tax: parseFloat(coldFriction),
+                enable_manager_observations: enableObservations
             },
             environmental_context: {
                 game_id: `GAME_${activeTeamId}_2026`,
@@ -549,24 +581,27 @@ export function App() {
                 opposing_pitcher_movement: pitcherMov,
                 opposing_pitcher_windup_efficiency: pitcherWindup,
                 opposing_pitcher_pitch_selection: pitchSelection,
-                opposing_pitcher_pitch_location: pitcherLoc
+                opposing_pitcher_pitch_location: pitcherLoc,
+                opposing_pitcher_composure: pitcherComposure,
+                opposing_pitcher_tipping: pitcherTipping
             });
 
             const res = await fetch(`/api/v1/optimize/lineup?${queryParams.toString()}`);
             if (!res.ok) throw new Error("Lineup optimization call failed.");
             const data = await res.json();
-            setOptimizedLineup(data.optimized_lineup);
+            const lineup = data.optimized_lineup || [];
+            setOptimizedLineup(lineup);
 
             // Seed sub active batter if empty
-            if (data.optimized_lineup.length > 0 && !subActiveBatterId) {
-                setSubActiveBatterId(data.optimized_lineup[0].player_id.toString());
-                setSandboxStance(data.optimized_lineup[0].stand_in_box);
-                setSandboxChoke(data.optimized_lineup[0].choke_up.toString());
+            if (lineup.length > 0 && !subActiveBatterId) {
+                setSubActiveBatterId(lineup[0].player_id.toString());
+                setSandboxStance(lineup[0].stand_in_box);
+                setSandboxChoke(lineup[0].choke_up.toString());
             }
         } catch (err) {
             console.error(err);
         }
-    }, [pitcherHand, leverage, pitcherArm, pitcherRubber, pitcherNatArm, pitcherNatRubber, pitcherVel, pitcherCmd, pitcherMov, pitcherWindup, pitcherLoc, pitchFB, pitchSL, pitchCB, pitchCH, subActiveBatterId]);
+    }, [pitcherHand, leverage, pitcherArm, pitcherRubber, pitcherNatArm, pitcherNatRubber, pitcherVel, pitcherCmd, pitcherMov, pitcherWindup, pitcherLoc, pitchFB, pitchSL, pitchCB, pitchCH, subActiveBatterId, pitcherComposure, pitcherTipping]);
 
     // Fetch roster directories
     const fetchRosterPlayers = useCallback(async () => {
@@ -581,12 +616,25 @@ export function App() {
             setOurPlayers(ours);
             setOpposingPlayers(opps);
 
-            if (ours.length > 0 && !stealRunnerId) {
-                setStealRunnerId(ours[0].id.toString());
+            const pitchers = allPlayers.filter(p => p.team_id == activeTeamId && p.position.toUpperCase() === 'P');
+            const catchers = allPlayers.filter(p => p.team_id == activeTeamId && p.position.toUpperCase() === 'C');
+            setOurPitchers(pitchers);
+            setOurCatchers(catchers);
+
+            if (ours.length > 0) {
+                if (!stealRunnerId) setStealRunnerId(ours[0].id.toString());
+                if (!mlPlayerId) setMlPlayerId(ours[0].id.toString());
             }
             if (opps.length > 0) {
                 if (!bullpenBatterId) setBullpenBatterId(opps[0].id.toString());
                 if (!shiftBatterId) setShiftBatterId(opps[0].id.toString());
+                if (!tunnelBatterId) setTunnelBatterId(opps[0].id.toString());
+            }
+            if (pitchers.length > 0 && !tunnelPitcherId) {
+                setTunnelPitcherId(pitchers[0].id.toString());
+            }
+            if (catchers.length > 0 && !tunnelCatcherId) {
+                setTunnelCatcherId(catchers[0].id.toString());
             }
 
             // Populate Sandbox Editor selector
@@ -609,11 +657,24 @@ export function App() {
                     const match = ourAll.find(p => p.id.toString() === editorPlayerId);
                     if (match) setSelectedPlayerDetail(match);
                 }
+                
+                // Initialize dugout selected player
+                if (!dugoutPlayerId) {
+                    setDugoutPlayerId(ourAll[0].id.toString());
+                    setDugoutFocusState(ourAll[0].focus_state || "Neutral");
+                    setDugoutSwingPath(ourAll[0].swing_path_adjustment || "Standard");
+                } else {
+                    const dugoutMatch = ourAll.find(p => p.id.toString() === dugoutPlayerId);
+                    if (dugoutMatch) {
+                        setDugoutFocusState(dugoutMatch.focus_state || "Neutral");
+                        setDugoutSwingPath(dugoutMatch.swing_path_adjustment || "Standard");
+                    }
+                }
             }
         } catch (err) {
             console.error(err);
         }
-    }, [activeTeamId, stealRunnerId, bullpenBatterId, shiftBatterId, editorPlayerId]);
+    }, [activeTeamId, stealRunnerId, bullpenBatterId, shiftBatterId, editorPlayerId, dugoutPlayerId, tunnelBatterId, tunnelPitcherId, tunnelCatcherId, mlPlayerId]);
 
     // Handle Active batter change in sub form
     const handleActiveBatterChange = (id) => {
@@ -656,7 +717,9 @@ export function App() {
             pitcher_pitch_selection: pitchSelection,
             pitcher_pitch_location: pitcherLoc,
             active_batter_stance_override: sandboxStance,
-            active_batter_choke_override: parseInt(sandboxChoke)
+            active_batter_choke_override: parseInt(sandboxChoke),
+            pitcher_composure: pitcherComposure,
+            is_tipping_pitches: pitcherTipping
         };
 
         try {
@@ -750,6 +813,105 @@ export function App() {
                 }
             });
     };
+    // Update Dugout observations
+    const handleDugoutUpdate = async (field, value) => {
+        if (!dugoutPlayerId) return;
+        let newFocus = dugoutFocusState;
+        let newSwing = dugoutSwingPath;
+        if (field === 'focus') {
+            setDugoutFocusState(value);
+            newFocus = value;
+        } else if (field === 'swing') {
+            setDugoutSwingPath(value);
+            newSwing = value;
+        }
+        
+        try {
+            const res = await fetch(`/api/v1/players/${dugoutPlayerId}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    focus_state: newFocus,
+                    swing_path_adjustment: newSwing
+                })
+            });
+            if (!res.ok) throw new Error("Failed to update dugout observation.");
+            
+            // Refresh calculations
+            fetchRosterPlayers();
+            fetchLineup();
+        } catch (err) {
+            console.error("Dugout update error:", err);
+        }
+    };
+
+    // Pitch Tunneling & Sequence Simulator Logic
+    const triggerPitchCaller = useCallback(async (historyList) => {
+        if (!tunnelPitcherId || !tunnelBatterId) return;
+        try {
+            const payload = {
+                batter_id: parseInt(tunnelBatterId),
+                pitcher_id: parseInt(tunnelPitcherId),
+                catcher_id: tunnelCatcherId ? parseInt(tunnelCatcherId) : null,
+                previous_pitches: historyList || previousPitches,
+                inning: parseInt(subInning),
+                game_hour: parseInt(config?.environmental_context?.game_hour || 19)
+            };
+            const res = await fetch("/api/v1/optimize/pitch-caller", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setTunnelResult(data);
+            }
+        } catch (err) {
+            console.error("Tunnel simulator call failed:", err);
+        }
+    }, [tunnelPitcherId, tunnelBatterId, tunnelCatcherId, previousPitches, subInning, config]);
+
+    const addPreviousPitch = (e) => {
+        e.preventDefault();
+        const newPitch = {
+            pitch_type: newPitchType,
+            location: newPitchLoc,
+            result: newPitchResult
+        };
+        const updated = [...previousPitches, newPitch];
+        setPreviousPitches(updated);
+        triggerPitchCaller(updated);
+    };
+
+    const clearPreviousPitches = () => {
+        setPreviousPitches([]);
+        setTunnelResult(null);
+    };
+
+    // Live ML Explainer Importances Fetcher
+    const fetchMlImportances = useCallback(async () => {
+        try {
+            const res = await fetch("/api/v1/ml/feature-importance");
+            if (res.ok) {
+                const data = await res.json();
+                setGlobalImportances(data);
+            }
+        } catch (err) {
+            console.error("Failed to fetch ML importances:", err);
+        }
+    }, []);
+
+    // Load ML importances on startup
+    useEffect(() => {
+        fetchMlImportances();
+    }, [fetchMlImportances]);
+
+    // Auto-retrigger Pitch Caller on context changes
+    useEffect(() => {
+        if (tunnelPitcherId && tunnelBatterId) {
+            triggerPitchCaller(previousPitches);
+        }
+    }, [tunnelPitcherId, tunnelBatterId, tunnelCatcherId, subInning]);
 
     // Save Player Profile updates
     const handleSavePlayerProfile = async (e) => {
@@ -840,6 +1002,23 @@ export function App() {
             ops: p.adjusted_ops
         };
     });
+    const teamAverages = React.useMemo(() => {
+        if (ourPlayers.length === 0) return { angle: 15.0, speed: 72.0, weight: 30.0, sprint: 27.0 };
+        const sum = ourPlayers.reduce((acc, p) => {
+            acc.angle += p.typical_swing_angle || 15.0;
+            acc.speed += p.bat_swing_speed || 72.0;
+            acc.weight += p.bat_weight || 30.0;
+            acc.sprint += p.sprint_speed || 27.0;
+            return acc;
+        }, { angle: 0, speed: 0, weight: 0, sprint: 0 });
+        
+        return {
+            angle: sum.angle / ourPlayers.length,
+            speed: sum.speed / ourPlayers.length,
+            weight: sum.weight / ourPlayers.length,
+            sprint: sum.sprint / ourPlayers.length
+        };
+    }, [ourPlayers]);
 
     return (
         <div className="container">
@@ -954,7 +1133,6 @@ export function App() {
                             </div>
                         </div>
                     )}
-
                     {/* COACHING PHILOSOPHY OVERRIDES */}
                     <div className="glass-card">
                         <div className="card-header">
@@ -978,15 +1156,26 @@ export function App() {
                                     <label>Cold Bench Penalty</label>
                                     <input type="number" step="0.01" min="0.0" max="0.5" value={coldFriction} onChange={(e) => setColdFriction(e.target.value)} required />
                                 </div>
+                                <div className="input-group full-width" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
+                                    <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', userSelect: 'none' }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={enableObservations} 
+                                            onChange={(e) => setEnableObservations(e.target.checked)} 
+                                            style={{ width: 'auto', cursor: 'pointer' }} 
+                                        /> 
+                                        Enable Scout Feel Observations
+                                    </label>
+                                </div>
                             </div>
                             <button type="submit" className="btn">Save Override Policy</button>
                         </form>
                     </div>
 
-                    {/* OPPOSING PITCHER PROFILE */}
+                    {/* OPPOSING PITCHER SCOUTING PANEL */}
                     <div className="glass-card">
                         <div className="card-header">
-                            <h2>🧢 Opposing Pitcher Profile</h2>
+                            <h2>🧢 Opposing Pitcher Scouting Panel</h2>
                         </div>
                         <div className="config-grid">
                             <div className="input-group">
@@ -1040,6 +1229,25 @@ export function App() {
                                     <option value="Third Base Side">Third Base Side</option>
                                 </select>
                             </div>
+                            <div className="input-group">
+                                <label>Composure</label>
+                                <select value={pitcherComposure} onChange={(e) => setPitcherComposure(e.target.value)}>
+                                    <option value="Neutral">Neutral</option>
+                                    <option value="Cruising">Cruising</option>
+                                    <option value="Rattled">Rattled</option>
+                                </select>
+                            </div>
+                            <div className="input-group" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '1.25rem' }}>
+                                <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', userSelect: 'none' }}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={pitcherTipping} 
+                                        onChange={(e) => setPitcherTipping(e.target.checked)} 
+                                        style={{ width: 'auto', cursor: 'pointer' }} 
+                                    /> 
+                                    Tipping Pitches
+                                </label>
+                            </div>
                             <div className="input-group full-width">
                                 <label>Fastball Velocity: {pitcherVel} mph</label>
                                 <input type="range" min="80" max="105" step="0.5" value={pitcherVel} onChange={(e) => setPitcherVel(parseFloat(e.target.value))} />
@@ -1080,7 +1288,6 @@ export function App() {
                             </div>
                         </div>
                     </div>
-
                 </div>
 
                 {/* RIGHT PANEL: optimized lineup */}
@@ -1527,6 +1734,272 @@ export function App() {
                                 </div>
                             )}
                         </div>
+                    </div>
+
+                </div>
+
+                {/* ⚡ LIVE COACH & SCOUT COMMAND CENTER */}
+                <div className="coaching-command-grid">
+                    
+                    {/* INTERACTIVE DUGOUT MANAGEMENT PANEL */}
+                    <div className="glass-card" style={{ display: 'flex', flexDirection: 'column' }}>
+                        <div className="card-header" style={{ marginBottom: '1rem' }}>
+                            <h2>🏟️ Dugout Management Panel</h2>
+                        </div>
+                        <div className="input-group" style={{ marginBottom: '1rem' }}>
+                            <label>Select Active Player</label>
+                            <select 
+                                value={dugoutPlayerId} 
+                                onChange={(e) => {
+                                    setDugoutPlayerId(e.target.value);
+                                    const match = [...ourPlayers, ...ourPitchers, ...ourCatchers].find(p => p.id.toString() === e.target.value);
+                                    if (match) {
+                                        setDugoutFocusState(match.focus_state || "Neutral");
+                                        setDugoutSwingPath(match.swing_path_adjustment || "Standard");
+                                    }
+                                }} 
+                                className="team-dropdown"
+                                style={{ width: '100%', minWidth: 'unset' }}
+                            >
+                                {[...ourPlayers, ...ourPitchers, ...ourCatchers].map(p => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.name} ({p.position})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="config-grid" style={{ marginBottom: '1rem', gridTemplateColumns: '1fr 1fr' }}>
+                            <div className="input-group">
+                                <label>Focus State</label>
+                                <select value={dugoutFocusState} onChange={(e) => handleDugoutUpdate('focus', e.target.value)}>
+                                    <option value="Neutral">Neutral</option>
+                                    <option value="Locked-In">Locked-In</option>
+                                    <option value="Anxious">Anxious</option>
+                                    <option value="Sluggish">Sluggish</option>
+                                </select>
+                            </div>
+                            <div className="input-group">
+                                <label>Swing Path</label>
+                                <select value={dugoutSwingPath} onChange={(e) => handleDugoutUpdate('swing', e.target.value)}>
+                                    <option value="Standard">Standard</option>
+                                    <option value="Shortened">Shortened</option>
+                                    <option value="Power Cut">Power Cut</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--card-border)', borderRadius: '8px', padding: '1rem', textAlign: 'center' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.5rem', display: 'block' }}>Active Status</span>
+                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                                <span 
+                                    className="status-badge" 
+                                    style={(() => {
+                                        const focusStyles = {
+                                            'locked-in': { background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)' },
+                                            'anxious': { background: 'rgba(249, 115, 22, 0.15)', color: '#f97316', border: '1px solid rgba(249, 115, 22, 0.3)' },
+                                            'sluggish': { background: 'rgba(107, 114, 128, 0.15)', color: '#9ca3af', border: '1px solid rgba(107, 114, 128, 0.3)' }
+                                        };
+                                        return focusStyles[dugoutFocusState.toLowerCase()] || { background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-muted)', border: '1px solid var(--card-border)' };
+                                    })()}
+                                >
+                                    {dugoutFocusState}
+                                </span>
+                                <span 
+                                    className="status-badge"
+                                    style={(() => {
+                                        const swingStyles = {
+                                            'shortened': { background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)' },
+                                            'power cut': { background: 'rgba(236, 72, 153, 0.15)', color: '#ec4899', border: '1px solid rgba(236, 72, 153, 0.3)' }
+                                        };
+                                        return swingStyles[dugoutSwingPath.toLowerCase()] || { background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-muted)', border: '1px solid var(--card-border)' };
+                                    })()}
+                                >
+                                    {dugoutSwingPath}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* PITCH TUNNELING & SEQUENCE SIMULATOR */}
+                    <div className="glass-card" style={{ display: 'flex', flexDirection: 'column' }}>
+                        <div className="card-header" style={{ marginBottom: '1rem' }}>
+                            <h2>👁️ Pitch Tunneling Simulator</h2>
+                        </div>
+                        <div className="config-grid" style={{ marginBottom: '0.5rem', gridTemplateColumns: '1fr 1fr' }}>
+                            <div className="input-group">
+                                <label>Pitcher</label>
+                                <select value={tunnelPitcherId} onChange={(e) => setTunnelPitcherId(e.target.value)} className="team-dropdown" style={{ width: '100%' }}>
+                                    {ourPitchers.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                    {ourPitchers.length === 0 && <option value="">No Pitchers</option>}
+                                </select>
+                            </div>
+                            <div className="input-group">
+                                <label>Batter</label>
+                                <select value={tunnelBatterId} onChange={(e) => setTunnelBatterId(e.target.value)} className="team-dropdown" style={{ width: '100%' }}>
+                                    {opposingPlayers.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                    {opposingPlayers.length === 0 && <option value="">No Hitters</option>}
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <form onSubmit={addPreviousPitch} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+                            <div className="config-grid" style={{ gridTemplateColumns: '1.2fr 1.2fr 1fr', gap: '0.5rem' }}>
+                                <div className="input-group">
+                                    <label style={{ fontSize: '0.75rem' }}>Type</label>
+                                    <select value={newPitchType} onChange={(e) => setNewPitchType(e.target.value)} style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem' }}>
+                                        <option value="Fastball">Fastball</option>
+                                        <option value="Slider">Slider</option>
+                                        <option value="Curveball">Curveball</option>
+                                        <option value="Changeup">Changeup</option>
+                                    </select>
+                                </div>
+                                <div className="input-group">
+                                    <label style={{ fontSize: '0.75rem' }}>Location</label>
+                                    <select value={newPitchLoc} onChange={(e) => setNewPitchLoc(e.target.value)} style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem' }}>
+                                        <option value="Low-Outside">Low-Outside</option>
+                                        <option value="High-Inside">High-Inside</option>
+                                        <option value="Low-Inside">Low-Inside</option>
+                                        <option value="High-Outside">High-Outside</option>
+                                        <option value="Down-Middle">Down-Middle</option>
+                                    </select>
+                                </div>
+                                <div className="input-group">
+                                    <label style={{ fontSize: '0.75rem' }}>Result</label>
+                                    <select value={newPitchResult} onChange={(e) => setNewPitchResult(e.target.value)} style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem' }}>
+                                        <option value="Strike">Strike</option>
+                                        <option value="Ball">Ball</option>
+                                        <option value="Foul">Foul</option>
+                                        <option value="In-Play">In-Play</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button type="submit" className="btn" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', flex: 1 }}>Add Pitch</button>
+                                <button type="button" className="btn" onClick={clearPreviousPitches} style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' }}>Clear</button>
+                            </div>
+                        </form>
+
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>At-Bat Sequence ({previousPitches.length} Pitches)</span>
+                            <div style={{ display: 'flex', gap: '0.35rem', overflowX: 'auto', paddingBottom: '0.25rem', minHeight: '35px' }}>
+                                {previousPitches.map((p, idx) => (
+                                    <div key={idx} className="pitch-bubble" title={`${p.location} - ${p.result}`}>
+                                        {idx + 1}
+                                    </div>
+                                ))}
+                                {previousPitches.length === 0 && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>No pitches thrown in this at-bat.</span>}
+                            </div>
+                            
+                            {tunnelResult ? (
+                                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--card-border)', borderRadius: '8px', padding: '0.75rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                                        <span style={{ fontSize: '0.8rem' }}>Next Recommended Call:</span>
+                                        <strong style={{ color: 'var(--primary)', fontSize: '0.85rem' }}>{tunnelResult.recommended_pitch} ({tunnelResult.recommended_location})</strong>
+                                    </div>
+                                    <div style={{ fontSize: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.5rem', borderTop: '1px solid var(--card-border)', paddingTop: '0.5rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span>Tunneling Score:</span>
+                                            <strong>{Math.round(tunnelResult.tunneling_score * 100)}%</strong>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span>Success Probability:</span>
+                                            <strong>{Math.round(tunnelResult.success_probability * 100)}%</strong>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span>Catcher Framing Bonus:</span>
+                                            <strong style={{ color: '#10b981' }}>+{tunnelResult.framing_bonus.toFixed(3)} OBP</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="result-placeholder" style={{ padding: '0.5rem' }}>
+                                    <p style={{ fontSize: '0.75rem' }}>Add previous pitches or trigger simulator to get optimal recommendations.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* LIVE ML FEATURE IMPORTANCE EXPLAINER */}
+                    <div className="glass-card" style={{ display: 'flex', flexDirection: 'column' }}>
+                        <div className="card-header" style={{ marginBottom: '1rem' }}>
+                            <h2>📊 Live ML Feature Explainer</h2>
+                        </div>
+                        <div className="input-group" style={{ marginBottom: '0.75rem' }}>
+                            <label>Select Batter</label>
+                            <select value={mlPlayerId} onChange={(e) => setMlPlayerId(e.target.value)} className="team-dropdown" style={{ width: '100%' }}>
+                                {ourPlayers.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                                {ourPlayers.length === 0 && <option value="">No Players</option>}
+                            </select>
+                        </div>
+
+                        {(() => {
+                            const p = ourPlayers.find(pl => pl.id.toString() === mlPlayerId) || ourPlayers[0];
+                            if (!p) return <div className="result-placeholder"><p>No players available.</p></div>;
+
+                            // Calculate impacts
+                            const avg = teamAverages;
+                            const swingAngleImpact = (p.typical_swing_angle - avg.angle) * globalImportances.typical_swing_angle * 0.002;
+                            const swingSpeedImpact = (p.bat_swing_speed - avg.speed) * globalImportances.bat_swing_speed * 0.005;
+                            const batWeightImpact = -(p.bat_weight - avg.weight) * globalImportances.bat_weight * 0.004;
+                            const sprintSpeedImpact = (p.sprint_speed - avg.sprint) * globalImportances.sprint_speed * 0.004;
+
+                            const featuresList = [
+                                { name: "Bat Speed", val: `${p.bat_swing_speed.toFixed(1)} mph`, impact: swingSpeedImpact, weight: globalImportances.bat_swing_speed },
+                                { name: "Sprint Speed", val: `${p.sprint_speed.toFixed(1)} ft/s`, impact: sprintSpeedImpact, weight: globalImportances.sprint_speed },
+                                { name: "Swing Angle", val: `${p.typical_swing_angle.toFixed(1)}°`, impact: swingAngleImpact, weight: globalImportances.typical_swing_angle },
+                                { name: "Bat Weight", val: `${p.bat_weight.toFixed(1)} oz`, impact: batWeightImpact, weight: globalImportances.bat_weight },
+                            ];
+
+                            return (
+                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>Feature Impact on Adjusted OPS</span>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                        {featuresList.map((f, idx) => {
+                                            const impactPct = Math.min(100, Math.max(-100, (f.impact / 0.05) * 100));
+                                            const isPos = f.impact >= 0;
+                                            return (
+                                                <div key={idx} style={{ fontSize: '0.75rem' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.15rem' }}>
+                                                        <span>{f.name} ({f.val})</span>
+                                                        <strong style={{ color: isPos ? '#10b981' : '#ef4444' }}>
+                                                            {isPos ? '+' : ''}{f.impact.toFixed(3)} OPS
+                                                        </strong>
+                                                    </div>
+                                                    <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', position: 'relative', overflow: 'hidden' }}>
+                                                        <div 
+                                                            style={{ 
+                                                                height: '100%', 
+                                                                background: isPos ? 'linear-gradient(90deg, #10b981, #34d399)' : 'linear-gradient(90deg, #ef4444, #f87171)', 
+                                                                width: `${Math.abs(impactPct)}%`,
+                                                                marginLeft: isPos ? '50%' : `${50 - Math.abs(impactPct)}%`,
+                                                                borderRadius: '3px'
+                                                            }} 
+                                                        />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    
+                                    <div style={{ marginTop: '0.5rem', background: 'rgba(255,255,255,0.02)', padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--card-border)' }}>
+                                        <span style={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>ML Model Global Feature Importances</span>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                            {featuresList.map((f, idx) => (
+                                                <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.7rem' }}>
+                                                    <span>{f.name}</span>
+                                                    <span>{Math.round(f.weight * 100)}%</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
                     </div>
 
                 </div>

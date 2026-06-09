@@ -606,3 +606,43 @@ table.lineup-table tr:hover {
     color: #fff;
     font-weight: 600;
 }
+
+/* NEW COACH/SCOUT PANELS STYLES */
+.coaching-command-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 1024px) {
+    .coaching-command-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.status-badge {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 6px;
+    text-transform: uppercase;
+}
+
+.pitch-bubble {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid rgba(255,255,255,0.2);
+    flex-shrink: 0;
+    cursor: help;
+}
+

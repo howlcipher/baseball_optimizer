@@ -74,6 +74,10 @@ An interactive single-page application is hosted at the root path `/` and suppor
 * **Advanced Decision Panels**: Real-time interactive components for Bullpen relief optimizations, Base running steal probability simulations, and Infield/Outfield defensive shift alignments.
 * **Flipping Themes**: Swapping team scopes dynamically shifts the CSS variable styles to reflect the team's colors (Cubs, Red Sox, Yankees, Dodgers, Giants).
 * **Light & Dark Mode**: A header toggle switches between custom, styled dark and light variants of each team's color palette.
+* **Interactive Dugout Management Panel**: Dynamic select-and-set dugout observation interface. Instantly edit a player's mental focus ("Locked-In", "Sluggish", "Anxious") and swing path ("Shortened", "Power Cut", "Standard") to save state to database and auto-reoptimize all lineups.
+* **Opposing Pitcher Scouting Panel**: Live composure ("Cruising", "Rattled") and tipping overrides impacting lineup and tactical subs.
+* **Pitch Tunneling & Sequence Simulator**: Timeline tracking of the current at-bat pitch history combined with next pitch optimal recommendations based on tunneling physics and catcher framing metrics.
+* **Live ML Feature Importance Explainer**: Local and global machine learning model feature importance explainer, displaying feature impact (swing angle, speed, bat weight, sprint speed) on player-specific adjusted OBP/SLG/OPS.
 
 ---
 

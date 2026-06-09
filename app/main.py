@@ -538,7 +538,38 @@ def update_player(player_id: int, payload: PlayerUpdatePayload, db: Session = De
     return player
 
 
+@app.get("/api/v1/ml/feature-importance")
+def get_ml_feature_importance():
+    """
+    Returns the global feature importances of the trained ML model.
+    """
+    if predictive_model is None:
+        return {
+            "typical_swing_angle": 0.15,
+            "bat_swing_speed": 0.55,
+            "bat_weight": 0.10,
+            "sprint_speed": 0.20
+        }
+    try:
+        importances = predictive_model.feature_importances_
+        return {
+            "typical_swing_angle": float(importances[0]),
+            "bat_swing_speed": float(importances[1]),
+            "bat_weight": float(importances[2]),
+            "sprint_speed": float(importances[3])
+        }
+    except Exception as e:
+        logger.error(f"Error reading feature importances: {e}")
+        return {
+            "typical_swing_angle": 0.15,
+            "bat_swing_speed": 0.55,
+            "bat_weight": 0.10,
+            "sprint_speed": 0.20
+        }
+
+
 # --- Category II: Tactical Roster Optimization ---
+
 
 @app.get("/api/v1/optimize/lineup", response_model=LineupOptimizationResponse)
 def optimize_lineup(

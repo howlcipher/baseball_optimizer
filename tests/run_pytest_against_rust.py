@@ -9,8 +9,11 @@ def main():
     print("RUNNING PYTEST E2E SUITE AGAINST RUST SERVER")
     print("====================================================")
 
+    # Resolve base directory dynamically
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
     # 1. Clean existing database
-    db_path = "/run/media/system/tallgeese/dev/baseball_optimizer/baseball_optimizer.db"
+    db_path = os.path.join(base_dir, "baseball_optimizer.db")
     if os.path.exists(db_path):
         print(f"Cleaning existing database at {db_path}...")
         os.remove(db_path)
@@ -20,7 +23,7 @@ def main():
     cmd = ["./target/debug/baseball_optimizer"]
     server_process = subprocess.Popen(
         cmd,
-        cwd="/run/media/system/tallgeese/dev/baseball_optimizer",
+        cwd=base_dir,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
@@ -53,9 +56,9 @@ def main():
 
     # 4. Execute pytest
     env = os.environ.copy()
-    env["PYTHONPATH"] = "/run/media/system/tallgeese/dev/baseball_optimizer/legacy"
+    env["PYTHONPATH"] = os.path.join(base_dir, "legacy")
     pytest_cmd = [sys.executable, "-m", "pytest", "legacy/tests/e2e", "-v"]
-    result = subprocess.run(pytest_cmd, cwd="/run/media/system/tallgeese/dev/baseball_optimizer", env=env)
+    result = subprocess.run(pytest_cmd, cwd=base_dir, env=env)
 
     # 5. Shut down the Rust server
     print("Tearing down Rust server...")

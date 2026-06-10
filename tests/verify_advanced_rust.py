@@ -10,7 +10,9 @@ def main():
     print("STARTING ADVANCED BASEBALL MATCHUP VERIFICATION (RUST)")
     print("====================================================")
 
-    db_path = "/run/media/system/tallgeese/dev/baseball_optimizer/baseball_optimizer.db"
+    # Resolve base directory dynamically
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    db_path = os.path.join(base_dir, "baseball_optimizer.db")
     if os.path.exists(db_path):
         os.remove(db_path)
 
@@ -19,7 +21,7 @@ def main():
     
     server_process = subprocess.Popen(
         cmd,
-        cwd="/run/media/system/tallgeese/dev/baseball_optimizer",
+        cwd=base_dir,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )

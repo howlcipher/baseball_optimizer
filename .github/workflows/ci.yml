@@ -79,7 +79,7 @@ jobs:
 
       - name: Docker Build Backend
         run: |
-          docker build -t baseball-backend:latest -f app/Dockerfile .
+          docker build -t baseball-backend:latest -f Dockerfile .
 
       - name: Docker Build Frontend
         run: |

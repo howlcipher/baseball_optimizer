@@ -22,7 +22,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: app/Dockerfile
+      dockerfile: Dockerfile
     container_name: baseball_backend
     restart: always
     ports:

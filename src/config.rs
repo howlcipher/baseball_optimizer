@@ -45,17 +45,15 @@ impl Default for AppConfig {
 
 pub fn load_config() -> AppConfig {
     let path = Path::new("app_config.json");
-    if path.exists() {
-        if let Ok(content) = fs::read_to_string(path) {
-            if let Ok(mut config) = serde_json::from_str::<AppConfig>(&content) {
+    if path.exists()
+        && let Ok(content) = fs::read_to_string(path)
+            && let Ok(mut config) = serde_json::from_str::<AppConfig>(&content) {
                 // Ensure the database_url has env override if exists
                 if let Ok(env_db_url) = std::env::var("DATABASE_URL") {
                     config.database_url = env_db_url;
                 }
                 return config;
             }
-        }
-    }
     let default_config = AppConfig::default();
     let _ = save_config(&default_config);
     default_config
@@ -63,10 +61,9 @@ pub fn load_config() -> AppConfig {
 
 pub fn save_config(config: &AppConfig) -> bool {
     let path = Path::new("app_config.json");
-    if let Ok(json_str) = serde_json::to_string_pretty(config) {
-        if fs::write(path, json_str).is_ok() {
+    if let Ok(json_str) = serde_json::to_string_pretty(config)
+        && fs::write(path, json_str).is_ok() {
             return true;
         }
-    }
     false
 }

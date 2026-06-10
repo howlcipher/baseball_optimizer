@@ -90,8 +90,7 @@ pub async fn init_db(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
     let raw_path = if database_url.starts_with("postgres") {
         tracing::warn!("PostgreSQL database URL detected: {}. Rust backend is SQLite-only. Falling back to SQLite file: baseball_optimizer.db", database_url);
         "baseball_optimizer.db".to_string()
-    } else if database_url.starts_with("sqlite:///") {
-        let remainder = &database_url[10..];
+    } else if let Some(remainder) = database_url.strip_prefix("sqlite:///") {
         let is_absolute = remainder.starts_with('/') 
             || remainder.starts_with("run/") 
             || remainder.starts_with("home/")
@@ -365,17 +364,13 @@ pub async fn insert_roster(pool: &SqlitePool, team_id: i32, team_name: &str, def
     let use_pybaseball = std::env::var("USE_PYBASEBALL").unwrap_or_else(|_| "false".to_string()).to_lowercase() == "true";
     let mut bridge_data: Option<Vec<serde_json::Value>> = None;
 
-    if use_pybaseball {
-        if let Ok(output) = std::process::Command::new("python3").arg("scripts/pybaseball_bridge.py").arg(team_name).output() {
-            if output.status.success() {
-                if let Ok(json_val) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
-                    if let Some(arr) = json_val.as_array() {
+    if use_pybaseball
+        && let Ok(output) = std::process::Command::new("python3").arg("scripts/pybaseball_bridge.py").arg(team_name).output()
+            && output.status.success()
+                && let Ok(json_val) = serde_json::from_slice::<serde_json::Value>(&output.stdout)
+                    && let Some(arr) = json_val.as_array() {
                         bridge_data = Some(arr.clone());
                     }
-                }
-            }
-        }
-    }
 
     let iter_len = bridge_data.as_ref().map(|v| v.len()).unwrap_or(default_players.len());
 
@@ -584,5 +579,5 @@ pub fn fetch_team_roster_data(team_name: &str) -> Vec<(String, String, String)> 
         list
     };
 
-    roster.into_iter().map(|(n, p, h)| (n, p, h)).collect()
+    roster.into_iter().collect()
 }

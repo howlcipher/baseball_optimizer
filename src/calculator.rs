@@ -34,13 +34,11 @@ pub static RANDOM_FOREST: OnceLock<Vec<DecisionTree>> = OnceLock::new();
 pub fn load_random_forest() -> &'static Vec<DecisionTree> {
     RANDOM_FOREST.get_or_init(|| {
         let path = std::path::Path::new("legacy/app/models/predictive_ops.json");
-        if path.exists() {
-            if let Ok(content) = std::fs::read_to_string(path) {
-                if let Ok(forest) = serde_json::from_str::<Vec<DecisionTree>>(&content) {
+        if path.exists()
+            && let Ok(content) = std::fs::read_to_string(path)
+                && let Ok(forest) = serde_json::from_str::<Vec<DecisionTree>>(&content) {
                     return forest;
                 }
-            }
-        }
         Vec::new()
     })
 }
@@ -130,8 +128,8 @@ pub fn get_position_swap_penalty(player_pos: &str, assigned_pos: &str) -> (f64, 
         return (0.005, 0.010);
     }
 
-    let inf = vec!["1B", "2B", "3B", "SS", "IF"];
-    let out = vec!["LF", "CF", "RF", "OF"];
+    let inf = ["1B", "2B", "3B", "SS", "IF"];
+    let out = ["LF", "CF", "RF", "OF"];
 
     if inf.contains(&p_pos.as_str()) && inf.contains(&a_pos.as_str()) {
         if a_pos == "1B" {
@@ -543,11 +541,10 @@ pub fn calculate_advanced_matchup_factors(
     let parts: Vec<&str> = pitcher_pitch_selection.split(',').collect();
     for p in parts {
         let kv: Vec<&str> = p.split(':').collect();
-        if kv.len() == 2 {
-            if let Ok(val) = kv[1].trim().parse::<f64>() {
+        if kv.len() == 2
+            && let Ok(val) = kv[1].trim().parse::<f64>() {
                 selection_dict.insert(kv[0].trim().to_lowercase(), val);
             }
-        }
     }
     let fb_freq = *selection_dict.get("fastball").unwrap_or(&0.6);
     let breaking_freq = *selection_dict.get("slider").unwrap_or(&0.0) + *selection_dict.get("curveball").unwrap_or(&0.0);
@@ -586,26 +583,24 @@ pub fn calculate_advanced_matchup_factors(
     let mut batter_stance_toll_applied = false;
     let mut batter_grip_toll_applied = false;
 
-    if let Some(nat_choke) = natural_choke_up {
-        if choke_up != nat_choke {
+    if let Some(nat_choke) = natural_choke_up
+        && choke_up != nat_choke {
             batter_adaptation_obp_mult *= 0.98;
             batter_adaptation_slg_mult *= 0.95;
             batter_grip_toll_applied = true;
         }
-    }
 
-    if let Some(nat_box) = natural_stand_in_box {
-        if stand_in_box.trim().to_lowercase() != nat_box.trim().to_lowercase() {
+    if let Some(nat_box) = natural_stand_in_box
+        && stand_in_box.trim().to_lowercase() != nat_box.trim().to_lowercase() {
             batter_adaptation_obp_mult *= 0.96;
             batter_adaptation_slg_mult *= 0.92;
             batter_stance_toll_applied = true;
         }
-    }
 
-    let is_twilight = game_hour >= 16 && game_hour <= 18;
+    let is_twilight = (16..=18).contains(&game_hour);
     let mut twilight_penalty_obp = 1.0;
     let mut twilight_penalty_slg = 1.0;
-    if is_twilight && (inning >= 3 && inning <= 4) {
+    if is_twilight && (3..=4).contains(&inning) {
         twilight_penalty_obp = 0.95;
         twilight_penalty_slg = 0.95;
     }
@@ -1070,12 +1065,11 @@ pub fn simulate_pitch_mix_matchup(
                 obp_adj -= 0.015 * (v_break.abs() - 9.0) * 0.08;
                 slg_adj -= 0.025 * (v_break.abs() - 9.0) * 0.08;
             }
-        } else if name == "changeup" {
-            if batter_swing_speed > 75.0 {
+        } else if name == "changeup"
+            && batter_swing_speed > 75.0 {
                 obp_adj -= 0.015;
                 slg_adj -= 0.025;
             }
-        }
 
         total_obp_adj += weight * obp_adj;
         total_slg_adj += weight * slg_adj;
@@ -1620,7 +1614,7 @@ pub fn calculate_wpa_outcomes(
         let mut next_half_inning = half_inning.to_string();
         let mut next_inning = inning;
         let mut next_outs = outs;
-        let mut next_bases = bases.clone();
+        let mut next_bases = *bases;
         let mut runs_scored = 0;
 
         match outcome {
@@ -1847,11 +1841,10 @@ pub fn predict_pitch_selection(
     let mut baseline = HashMap::new();
     for part in pitcher_selection_str.split(',') {
         let kv: Vec<&str> = part.split(':').collect();
-        if kv.len() == 2 {
-            if let Ok(pct) = kv[1].parse::<f64>() {
+        if kv.len() == 2
+            && let Ok(pct) = kv[1].parse::<f64>() {
                 baseline.insert(kv[0].to_string(), pct);
             }
-        }
     }
     if baseline.is_empty() {
         baseline.insert("Fastball".to_string(), 1.0);
@@ -1994,7 +1987,7 @@ pub fn calculate_at_bat_decision(
     };
 
     let wp_if_ball = if balls == 3 {
-        let mut new_bases = bases.clone();
+        let mut new_bases = *bases;
         let mut runs = 0;
         if !new_bases[0] { new_bases[0] = true; }
         else if !new_bases[1] { new_bases[1] = true; }
@@ -2007,7 +2000,7 @@ pub fn calculate_at_bat_decision(
 
     let wp_if_strike = if strikes == 2 {
         let mut new_outs = outs + 1;
-        let mut new_bases = bases.clone();
+        let mut new_bases = *bases;
         let mut next_inning = inning;
         let mut next_half = "Bottom";
         if new_outs >= 3 {
@@ -2028,7 +2021,7 @@ pub fn calculate_at_bat_decision(
     let out_prob = 1.0 - hit_prob;
 
     let wp_if_hit = {
-        let mut new_bases = bases.clone();
+        let mut new_bases = *bases;
         let mut runs = 0;
         if new_bases[2] { runs += 1; new_bases[2] = false; }
         if new_bases[1] { new_bases[2] = true; new_bases[1] = false; }
@@ -2039,7 +2032,7 @@ pub fn calculate_at_bat_decision(
 
     let wp_if_out = {
         let mut new_outs = outs + 1;
-        let mut new_bases = bases.clone();
+        let mut new_bases = *bases;
         let mut next_inning = inning;
         let mut next_half = "Bottom";
         if new_outs >= 3 {

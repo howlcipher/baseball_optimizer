@@ -722,17 +722,13 @@ async fn swap_context(
         let use_pybaseball = std::env::var("USE_PYBASEBALL").unwrap_or_else(|_| "false".to_string()).to_lowercase() == "true";
         let mut bridge_data: Option<Vec<serde_json::Value>> = None;
 
-        if use_pybaseball {
-            if let Ok(output) = std::process::Command::new("python3").arg("scripts/pybaseball_bridge.py").arg(&payload.name).output() {
-                if output.status.success() {
-                    if let Ok(json_val) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
-                        if let Some(arr) = json_val.as_array() {
+        if use_pybaseball
+            && let Ok(output) = std::process::Command::new("python3").arg("scripts/pybaseball_bridge.py").arg(&payload.name).output()
+                && output.status.success()
+                    && let Ok(json_val) = serde_json::from_slice::<serde_json::Value>(&output.stdout)
+                        && let Some(arr) = json_val.as_array() {
                             bridge_data = Some(arr.clone());
                         }
-                    }
-                }
-            }
-        }
 
         let mock_data = if bridge_data.is_none() { Some(db::fetch_team_roster_data(&payload.name)) } else { None };
         let mut base_id = if payload.team_id == 112 { 500000 } else { payload.team_id * 1000 };
@@ -1162,11 +1158,10 @@ async fn optimize_lineup(
             let mut sorted_fatigued = available_players.clone();
             sorted_fatigued.sort_by_key(|p| -p.cumulative_days_played);
             for p in sorted_fatigued {
-                if p.cumulative_days_played >= (ovr.fatigue_threshold + 2) {
-                    if (available_players.len() as i32) - (rested_player_names.len() as i32) > 9 {
+                if p.cumulative_days_played >= (ovr.fatigue_threshold + 2)
+                    && (available_players.len() as i32) - (rested_player_names.len() as i32) > 9 {
                         rested_player_names.push(p.name.clone());
                     }
-                }
             }
         }
     }
@@ -1356,8 +1351,8 @@ async fn optimize_lineup(
         if p_pos == a_pos {
             return base_def;
         }
-        let inf = vec!["1B", "2B", "3B", "SS", "IF"];
-        let out = vec!["LF", "CF", "RF", "OF"];
+        let inf = ["1B", "2B", "3B", "SS", "IF"];
+        let out = ["LF", "CF", "RF", "OF"];
         if inf.contains(&p_pos.as_str()) && inf.contains(&a_pos.as_str()) {
             return base_def - 1.5;
         }
@@ -2124,8 +2119,8 @@ async fn optimize_steal(
 
     let mut pitcher_hold_rating = 0.0;
     let mut uses_slide_step = false;
-    if let Some(p_id) = query.pitcher_id {
-        if let Ok(Some(mut pitcher)) = sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
+    if let Some(p_id) = query.pitcher_id
+        && let Ok(Some(mut pitcher)) = sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
             .bind(p_id)
             .fetch_optional(&state.pool)
             .await
@@ -2134,7 +2129,6 @@ async fn optimize_steal(
             pitcher_hold_rating = pitcher.hold_runner_rating;
             uses_slide_step = pitcher.uses_slide_step;
         }
-    }
 
     let result = calculator::calculate_steal_probability(
         runner.sprint_speed,
@@ -2409,11 +2403,10 @@ async fn recommend_pitch(
     if payload.batter_id <= 0 || payload.pitcher_id <= 0 {
         return (StatusCode::BAD_REQUEST, "Batter and Pitcher IDs must be positive").into_response();
     }
-    if let Some(c_id) = payload.catcher_id {
-        if c_id <= 0 {
+    if let Some(c_id) = payload.catcher_id
+        && c_id <= 0 {
             return (StatusCode::BAD_REQUEST, "Catcher ID must be positive").into_response();
         }
-    }
 
     let mut pitcher = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
         .bind(payload.pitcher_id)

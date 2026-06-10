@@ -5,13 +5,12 @@ mod calculator;
 use axum::{
     extract::{Path as AxumPath, Query as AxumQuery, State},
     http::StatusCode,
-    response::{Html, IntoResponse},
+    response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqlitePool;
-use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -795,7 +794,7 @@ async fn swap_context(
         )
     })?;
 
-    let ovr = get_team_override(&state.pool, team.id).await.ok();
+    let _ovr = get_team_override(&state.pool, team.id).await.ok();
     let env = get_team_env(&state.pool, team.id).await.ok();
 
     let roster_size: i32 = sqlx::query_scalar("SELECT COUNT(*) FROM players WHERE team_id = $1")
@@ -1138,7 +1137,7 @@ async fn optimize_lineup(
             apply_platoon_splits(base_obp, base_slg, &player.batting_handedness, &params.opposing_pitcher_handedness)
         };
 
-        let (mut obp_geom, mut slg_geom) = if use_net_run_defense {
+        let (obp_geom, slg_geom) = if use_net_run_defense {
             calculator::get_ballpark_geometry_factor(
                 &team.stadium_name,
                 player.typical_swing_angle,
@@ -1303,7 +1302,7 @@ async fn optimize_lineup(
     // Evaluate player ops at each position pool
     let mut player_ops_at_pos = std::collections::HashMap::new();
     for item in top_9_candidates {
-        let (player, final_ops, final_obp, final_slg, _, _, _, _) = *item;
+        let (player, _final_ops, final_obp, final_slg, _, _, _, _) = *item;
         let mut pos_map = std::collections::HashMap::new();
         for pos in &positions_pool {
             let (obp_pen, slg_pen) = calculator::get_position_swap_penalty(&player.position, pos);

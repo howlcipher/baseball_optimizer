@@ -269,6 +269,7 @@ pub struct ProjectionResult {
     pub details: ProjectionDetails,
 }
 
+#[allow(unused_variables, unused_assignments)]
 pub fn calculate_advanced_matchup_factors(
     typical_swing_angle: f64,
     mut bat_swing_speed: f64,
@@ -283,8 +284,8 @@ pub fn calculate_advanced_matchup_factors(
     pitcher_arm_angle: &str,
     pitcher_rubber_position: &str,
     pitcher_velocity: f64,
-    mut pitcher_command: f64,
-    mut pitcher_movement: f64,
+    pitcher_command: f64,
+    pitcher_movement: f64,
     pitcher_windup_efficiency: f64,
     pitcher_pitch_selection: &str,
     pitcher_pitch_location: &str,
@@ -395,8 +396,7 @@ pub fn calculate_advanced_matchup_factors(
         1.0
     };
 
-    let mut command_decayed = command_val * ttop_mult;
-    let movement_decayed = movement_val * ttop_mult;
+    let command_decayed = command_val * ttop_mult;
 
     let mut command_mult = 1.0;
     let mut adjusted_velocity = velocity_val;
@@ -656,7 +656,7 @@ pub fn calculate_true_projection(
     fatigue_threshold: i32,
     disrupted_sleep: f64,
     leverage_scenario: &str,
-    mut anxiety_modifier: f64,
+    anxiety_modifier: f64,
     clutch_weight: f64,
     base_park_factor: f64,
     elevation: f64,
@@ -900,7 +900,7 @@ pub struct DefensiveShiftResult {
 
 pub fn calculate_defensive_shift_alignment(
     typical_swing_angle: f64,
-    batting_handedness: &str,
+    _batting_handedness: &str,
     pitcher_velocity: f64,
     runners_on_base: bool,
 ) -> DefensiveShiftResult {
@@ -909,18 +909,13 @@ pub fn calculate_defensive_shift_alignment(
     let is_pull_heavy = pull_factor > 0.40;
     let is_oppo_heavy = pull_factor < -0.20;
 
-    let mut alignment = "Standard".to_string();
-    let mut reasoning = "".to_string();
-
-    if is_pull_heavy {
-        alignment = "Pull-Shift".to_string();
-        reasoning = format!("Hitter has a high swing angle ({:.1}°) and faces a velocity profile ({:.1}mph) that encourages heavy pull distribution. Shift defenders toward the pull side.", typical_swing_angle, pitcher_velocity);
+    let (alignment, mut reasoning) = if is_pull_heavy {
+        ("Pull-Shift".to_string(), format!("Hitter has a high swing angle ({:.1}°) and faces a velocity profile ({:.1}mph) that encourages heavy pull distribution. Shift defenders toward the pull side.", typical_swing_angle, pitcher_velocity))
     } else if is_oppo_heavy {
-        alignment = "Opposite-Field Shift".to_string();
-        reasoning = format!("Hitter has a flat swing angle ({:.1}°) and faces high velocity ({:.1}mph), yielding late timing and opposite-field push tendencies. Adjust defense to cover the push zones.", typical_swing_angle, pitcher_velocity);
+        ("Opposite-Field Shift".to_string(), format!("Hitter has a flat swing angle ({:.1}°) and faces high velocity ({:.1}mph), yielding late timing and opposite-field push tendencies. Adjust defense to cover the push zones.", typical_swing_angle, pitcher_velocity))
     } else {
-        reasoning = "Hitter displays a balanced hit distribution across all fields. Maintain standard defensive depth and spacing.".to_string();
-    }
+        ("Standard".to_string(), "Hitter displays a balanced hit distribution across all fields. Maintain standard defensive depth and spacing.".to_string())
+    };
 
     let mut outfield_depth = "Standard".to_string();
     if typical_swing_angle > 22.0 {

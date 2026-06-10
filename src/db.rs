@@ -1,5 +1,5 @@
-use sqlx::sqlite::{SqlitePool, SqliteQueryResult};
-use sqlx::{FromRow, Row};
+use sqlx::sqlite::SqlitePool;
+use sqlx::FromRow;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, FromRow, Serialize, Deserialize, Clone)]
@@ -249,7 +249,7 @@ pub fn get_mock_physical_attributes(name: &str) -> serde_json::Value {
     let uses_slide_step = lcg_rand(13, 0.0, 1.0) < 0.3;
     let pop_time = (lcg_rand(14, 1.85, 2.25) * 100.0).round() / 100.0;
     let framing_rating = (lcg_rand(15, 0.2, 0.8) * 100.0).round() / 100.0;
-    let outs_above_average = ((lcg_rand(16, -8.0, 12.0)) as i32);
+    let outs_above_average = lcg_rand(16, -8.0, 12.0) as i32;
     
     let p_type = lcg_choice(17, &["Starter", "Reliever", "Closer"]);
     let p_arm = lcg_choice(18, &["Three-Quarters", "Overhand", "Sidearm", "Submarine"]);

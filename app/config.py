@@ -12,7 +12,12 @@ def load_config():
         "logging_level": "INFO",
         "cache_ttl_seconds": 3600,
         "default_team_id": 112,
-        "mock_api_latency_ms": 100
+        "mock_api_latency_ms": 100,
+        "use_pitch_mix_model": False,
+        "use_ttop_fatigue": False,
+        "use_monte_carlo": False,
+        "use_net_run_defense": False,
+        "use_workload_rest": False
     }
     if os.path.exists(CONFIG_PATH):
         try:

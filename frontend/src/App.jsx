@@ -382,6 +382,16 @@ export function App() {
     const [mockLatency, setMockLatency] = useState(100);
     const [showConfigPanel, setShowConfigPanel] = useState(false);
 
+    const [usePitchMixModel, setUsePitchMixModel] = useState(false);
+    const [useTtopFatigue, setUseTtopFatigue] = useState(false);
+    const [useMonteCarlo, setUseMonteCarlo] = useState(false);
+    const [useNetRunDefense, setUseNetRunDefense] = useState(false);
+    const [useWorkloadRest, setUseWorkloadRest] = useState(false);
+
+    const [monteCarloResults, setMonteCarloResults] = useState(null);
+    const [ballparkGeometryResults, setBallparkGeometryResults] = useState(null);
+    const [rosterAvailabilityResults, setRosterAvailabilityResults] = useState(null);
+
     // Mock response dictionary
     const getMockResponse = useCallback((url, options = {}) => {
         const path = url.split('?')[0];
@@ -513,7 +523,12 @@ export function App() {
                 logging_level: loggingLevel,
                 cache_ttl_seconds: cacheTtl,
                 default_team_id: defaultTeamId,
-                mock_api_latency_ms: mockLatency
+                mock_api_latency_ms: mockLatency,
+                use_pitch_mix_model: usePitchMixModel,
+                use_ttop_fatigue: useTtopFatigue,
+                use_monte_carlo: useMonteCarlo,
+                use_net_run_defense: useNetRunDefense,
+                use_workload_rest: useWorkloadRest
             };
         } else {
             data = { success: true };
@@ -525,7 +540,7 @@ export function App() {
             statusText: "OK",
             json: async () => data
         };
-    }, [activeTeamId, fatigueThreshold, clutchWeight, defInning, coldFriction, enableObservations, temp, humidity, windSpeed, windDir, apiBaseUrl, databaseUrl, offlineMode, loggingLevel, cacheTtl, defaultTeamId, mockLatency]);
+    }, [activeTeamId, fatigueThreshold, clutchWeight, defInning, coldFriction, enableObservations, temp, humidity, windSpeed, windDir, apiBaseUrl, databaseUrl, offlineMode, loggingLevel, cacheTtl, defaultTeamId, mockLatency, usePitchMixModel, useTtopFatigue, useMonteCarlo, useNetRunDefense, useWorkloadRest]);
 
     // Custom fetch wrapper
     const apiFetch = useCallback(async (url, options = {}) => {
@@ -563,6 +578,11 @@ export function App() {
                 setCacheTtl(data.cache_ttl_seconds || 3600);
                 setDefaultTeamId(data.default_team_id || 112);
                 setMockLatency(data.mock_api_latency_ms || 100);
+                setUsePitchMixModel(data.use_pitch_mix_model || false);
+                setUseTtopFatigue(data.use_ttop_fatigue || false);
+                setUseMonteCarlo(data.use_monte_carlo || false);
+                setUseNetRunDefense(data.use_net_run_defense || false);
+                setUseWorkloadRest(data.use_workload_rest || false);
             }
         } catch (err) {
             console.error("Failed to load backend settings, using local settings:", err);
@@ -583,7 +603,12 @@ export function App() {
                         logging_level: loggingLevel,
                         cache_ttl_seconds: cacheTtl,
                         default_team_id: defaultTeamId,
-                        mock_api_latency_ms: mockLatency
+                        mock_api_latency_ms: mockLatency,
+                        use_pitch_mix_model: usePitchMixModel,
+                        use_ttop_fatigue: useTtopFatigue,
+                        use_monte_carlo: useMonteCarlo,
+                        use_net_run_defense: useNetRunDefense,
+                        use_workload_rest: useWorkloadRest
                     })
                 });
                 if (!res.ok) throw new Error("Failed to save backend app settings.");
@@ -817,6 +842,10 @@ export function App() {
             const data = await res.json();
             const lineup = data.optimized_lineup || [];
             setOptimizedLineup(lineup);
+            
+            setMonteCarloResults(data.monte_carlo_results || null);
+            setBallparkGeometryResults(data.ballpark_geometry_results || null);
+            setRosterAvailabilityResults(data.roster_availability_results || null);
 
             // Seed sub active batter if empty
             if (lineup.length > 0 && !subActiveBatterId) {
@@ -1358,6 +1387,56 @@ export function App() {
                                 <option value="11113">11113 (SF Giants)</option>
                             </select>
                         </div>
+                        <div className="input-group" style={{ gridColumn: '1 / -1', marginTop: '0.5rem' }}>
+                            <h4 style={{ marginBottom: '0.5rem', color: 'var(--primary)' }}>Advanced Strategy Features</h4>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem' }}>
+                                <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', userSelect: 'none' }}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={usePitchMixModel} 
+                                        onChange={(e) => setUsePitchMixModel(e.target.checked)} 
+                                        style={{ width: 'auto', cursor: 'pointer' }}
+                                    />
+                                    Dynamic Pitch-Mix Matchup Model
+                                </label>
+                                <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', userSelect: 'none' }}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={useTtopFatigue} 
+                                        onChange={(e) => setUseTtopFatigue(e.target.checked)} 
+                                        style={{ width: 'auto', cursor: 'pointer' }}
+                                    />
+                                    In-Game Fatigue & TTOP Penalty
+                                </label>
+                                <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', userSelect: 'none' }}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={useMonteCarlo} 
+                                        onChange={(e) => setUseMonteCarlo(e.target.checked)} 
+                                        style={{ width: 'auto', cursor: 'pointer' }}
+                                    />
+                                    Stochastic Monte Carlo Engine
+                                </label>
+                                <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', userSelect: 'none' }}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={useNetRunDefense} 
+                                        onChange={(e) => setUseNetRunDefense(e.target.checked)} 
+                                        style={{ width: 'auto', cursor: 'pointer' }}
+                                    />
+                                    Ballpark Geometry & Net Runs
+                                </label>
+                                <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', userSelect: 'none' }}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={useWorkloadRest} 
+                                        onChange={(e) => setUseWorkloadRest(e.target.checked)} 
+                                        style={{ width: 'auto', cursor: 'pointer' }}
+                                    />
+                                    Player Fatigue & Workload Rest
+                                </label>
+                            </div>
+                        </div>
                         <div className="full-width" style={{ marginTop: '0.5rem', display: 'flex', gap: '1rem', gridColumn: '1 / -1' }}>
                             <button type="submit" className="btn" style={{ background: 'linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.75))', flex: 1 }}>
                                 Save App Configuration
@@ -1633,7 +1712,7 @@ export function App() {
                                     <th style={{ width: '10%' }}>Pos</th>
                                     <th style={{ width: '8%' }}>Bat</th>
                                     <th style={{ width: '12%' }}>Base OPS</th>
-                                    <th style={{ width: '12%' }}>Adjusted OPS</th>
+                                    <th style={{ width: '12%' }}>{useNetRunDefense ? 'Net Runs' : 'Adjusted OPS'}</th>
                                     <th style={{ width: '23%' }}>Athletic Modulators</th>
                                 </tr>
                             </thead>
@@ -1678,7 +1757,9 @@ export function App() {
                                             </td>
                                             <td><span className="hand-badge">{p.batting_handedness}</span></td>
                                             <td className="ops-value">{p.base_ops.toFixed(3)}</td>
-                                            <td className="ops-value ops-adjusted">{p.adjusted_ops.toFixed(3)}</td>
+                                            <td className="ops-value ops-adjusted">
+                                                {useNetRunDefense ? (p.net_runs !== undefined ? p.net_runs.toFixed(2) : p.adjusted_ops.toFixed(3)) : p.adjusted_ops.toFixed(3)}
+                                            </td>
                                             <td>
                                                 <span className={`factor-tag ${fatigueClass}`}>Fatigue {fatigueTax >= 1.0 ? 'OK' : fatigueTax.toFixed(2)}</span>
                                                 <span className={`factor-tag ${psychClass}`}>Stress {psych.toFixed(2)}</span>
@@ -1698,6 +1779,73 @@ export function App() {
                             </tbody>
                         </table>
                     </div>
+                    {/* Advanced Strategy Outputs Display */}
+                    {(monteCarloResults || ballparkGeometryResults || rosterAvailabilityResults) && (
+                        <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', borderTop: '1px solid var(--card-border)', paddingTop: '1.5rem' }}>
+                            <h3 style={{ fontSize: '1.1rem', color: 'var(--primary)', marginBottom: '0.25rem' }}>🧠 Advanced Modulator Outcomes</h3>
+                            
+                            {/* Roster & Rest */}
+                            {rosterAvailabilityResults && (
+                                <div className="status-indicator" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', padding: '0.75rem', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--card-border)' }}>
+                                    <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>📅 Roster Availability & Fatigue Rest</div>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                        {rosterAvailabilityResults.rested_players?.length > 0 ? (
+                                            <div>
+                                                <span style={{ color: 'var(--accent)', fontWeight: 600 }}>Rested (Benched due to fatigue limit):</span> {rosterAvailabilityResults.rested_players.join(', ')}
+                                            </div>
+                                        ) : (
+                                            <div>No players benched for fatigue rest today.</div>
+                                        )}
+                                        {rosterAvailabilityResults.fatigued_active_players?.length > 0 && (
+                                            <div style={{ marginTop: '0.25rem' }}>
+                                                <span style={{ color: 'orange', fontWeight: 600 }}>Fatigued but active:</span> {rosterAvailabilityResults.fatigued_active_players.join(', ')}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Ballpark carry */}
+                            {ballparkGeometryResults && (
+                                <div className="status-indicator" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', padding: '0.75rem', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--card-border)' }}>
+                                    <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>🏟️ Ballpark Geometry Adjuster</div>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                        Optimized lineup adjusted for <strong>{ballparkGeometryResults.stadium_name}</strong> (Elevation: {ballparkGeometryResults.elevation} ft, Base Park Factor: {ballparkGeometryResults.base_park_factor}). Spray chart factors applied to hit trajectories.
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Monte Carlo Results */}
+                            {monteCarloResults && (
+                                <div className="status-indicator" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.75rem', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--card-border)' }}>
+                                    <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>🎲 Monte Carlo Simulation Engine (10,000 Iterations)</div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', textAlign: 'center', marginTop: '0.25rem' }}>
+                                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '0.4rem', borderRadius: '4px' }}>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Expected Runs</div>
+                                            <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary)' }}>{monteCarloResults.expected_runs}</div>
+                                        </div>
+                                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '0.4rem', borderRadius: '4px' }}>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Blowout Inning %</div>
+                                            <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--accent)' }}>{(monteCarloResults.blowout_probability * 100).toFixed(1)}%</div>
+                                        </div>
+                                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '0.4rem', borderRadius: '4px' }}>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Bottom of 9th Win %</div>
+                                            <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary)' }}>{(monteCarloResults.ninth_inning_win_probability * 100).toFixed(1)}%</div>
+                                        </div>
+                                    </div>
+                                    <div style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                                        <strong>Most likely run outcomes:</strong> {
+                                            Object.entries(monteCarloResults.runs_distribution || {})
+                                                .sort((a,b) => b[1] - a[1])
+                                                .slice(0, 4)
+                                                .map(([runs, prob]) => `${runs} runs (${(prob*100).toFixed(1)}%)`)
+                                                .join(', ')
+                                        }
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* ADVANCED BIOMECHANICAL & PITCH CHARTING */}

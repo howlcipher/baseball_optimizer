@@ -123,6 +123,8 @@ class OptimizedLineupPlayer(BaseModel):
     stand_in_box: str
     optimized_stance: Optional[str] = None
     optimized_choke_up: Optional[int] = None
+    net_runs: Optional[float] = None
+
 
 
 class LineupOptimizationResponse(BaseModel):
@@ -130,6 +132,10 @@ class LineupOptimizationResponse(BaseModel):
     situational_leverage: str
     team_name: str
     optimized_lineup: List[OptimizedLineupPlayer]
+    monte_carlo_results: Optional[dict] = None
+    ballpark_geometry_results: Optional[dict] = None
+    roster_availability_results: Optional[dict] = None
+
 
 
 class TacticalSubRequest(BaseModel):
@@ -296,5 +302,10 @@ class AppSettingsSchema(BaseModel):
     cache_ttl_seconds: int
     default_team_id: int
     mock_api_latency_ms: int
+    use_pitch_mix_model: bool = False
+    use_ttop_fatigue: bool = False
+    use_monte_carlo: bool = False
+    use_net_run_defense: bool = False
+    use_workload_rest: bool = False
 
 

@@ -79,6 +79,14 @@ An interactive single-page application is hosted at the root path `/` and suppor
 * **Pitch Tunneling & Sequence Simulator**: Timeline tracking of the current at-bat pitch history combined with next pitch optimal recommendations based on tunneling physics and catcher framing metrics.
 * **Live ML Feature Importance Explainer**: Local and global machine learning model feature importance explainer, displaying feature impact (swing angle, speed, bat weight, sprint speed) on player-specific adjusted OBP/SLG/OPS.
 
+### Advanced Strategic Modulators (Togglable Settings)
+Managers and GMs can toggle these advanced modulators in the App Configuration settings panel:
+* **Dynamic Pitch-Mix Matchup Model**: Weights OBP/SLG baselines against the pitcher's detailed arsenal (percentages, velocity, spin, break) rather than simple platoon splits.
+* **In-Game Fatigue & Times Through the Order Penalty (TTOP)**: Simulates starting pitcher performance decay, applying cumulative penalties to velocity/command/movement after facing batters 2nd/3rd time or exceeding pitch count thresholds (75, 90, 105).
+* **Stochastic Monte Carlo Engine**: Runs 10,000 game iterations using a Markov chain state-transition matrix to calculate expected runs, blowout probability, and bottom of the 9th win probability distributions.
+* **Ballpark Geometry & Net Runs**: Swaps lineup optimization to maximize Net Runs (Offensive Runs Created minus Defensive Runs Allowed) adjusted for stadium dimensions (wall heights, distances, elevation).
+* **Player Fatigue & Workload Rest**: Auto-benches fatigued position players who exceed consecutive days limits, generating the next-best optimized lineup alternative.
+
 ---
 
 ## 3. Core API Endpoints

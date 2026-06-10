@@ -873,3 +873,415 @@ def calculate_defensive_shift_alignment(
             "outfield_depth": outfield_depth
         }
     }
+
+
+# ==============================================================================
+# CATEGORY V: ADVANCED STRATEGY MODULATORS
+# ==============================================================================
+
+class PitcherArsenal:
+    def __init__(self, pitch_selection_str: str, base_velocity: float, base_movement: float):
+        """
+        Parses pitch selection string and maps out pitch percentages and average pitch metrics.
+        """
+        self.pitches = {}
+        try:
+            parts = pitch_selection_str.split(",")
+            for p in parts:
+                k, v = p.split(":")
+                name = k.strip().capitalize()
+                self.pitches[name] = {
+                    "percentage": float(v),
+                    "velocity": base_velocity,
+                    "spin_rate": 2200.0,
+                    "h_break": 5.0,
+                    "v_break": 5.0
+                }
+        except Exception:
+            self.pitches = {
+                "Fastball": {"percentage": 0.60, "velocity": base_velocity, "spin_rate": 2200.0, "h_break": 4.0, "v_break": 8.0},
+                "Slider": {"percentage": 0.20, "velocity": base_velocity - 8.0, "spin_rate": 2400.0, "h_break": 12.0, "v_break": -2.0},
+                "Curveball": {"percentage": 0.10, "velocity": base_velocity - 15.0, "spin_rate": 2500.0, "h_break": 8.0, "v_break": -12.0},
+                "Changeup": {"percentage": 0.10, "velocity": base_velocity - 10.0, "spin_rate": 1800.0, "h_break": 6.0, "v_break": 2.0}
+            }
+
+        # Apply specific characteristics based on base attributes
+        for pitch_name, metrics in self.pitches.items():
+            if pitch_name == "Fastball":
+                metrics["velocity"] = base_velocity
+                metrics["spin_rate"] = 2200.0 + (base_movement * 200.0)
+                metrics["h_break"] = base_movement * 5.0
+                metrics["v_break"] = base_movement * 8.0
+            elif pitch_name == "Slider":
+                metrics["velocity"] = base_velocity - 8.0
+                metrics["spin_rate"] = 2400.0 + (base_movement * 300.0)
+                metrics["h_break"] = base_movement * 14.0
+                metrics["v_break"] = -2.0 - (base_movement * 4.0)
+            elif pitch_name == "Curveball":
+                metrics["velocity"] = base_velocity - 15.0
+                metrics["spin_rate"] = 2500.0 + (base_movement * 300.0)
+                metrics["h_break"] = base_movement * 10.0
+                metrics["v_break"] = -12.0 - (base_movement * 6.0)
+            elif pitch_name == "Changeup":
+                metrics["velocity"] = base_velocity - 10.0
+                metrics["spin_rate"] = 1800.0 + (base_movement * 100.0)
+                metrics["h_break"] = base_movement * 6.0
+                metrics["v_break"] = 4.0 - (base_movement * 2.0)
+            else:
+                metrics["velocity"] = base_velocity - 5.0
+                metrics["spin_rate"] = 2000.0
+                metrics["h_break"] = base_movement * 8.0
+                metrics["v_break"] = 0.0
+
+def simulate_pitch_mix_matchup(
+    base_obp: float,
+    base_slg: float,
+    batter_swing_angle: float,
+    batter_swing_speed: float,
+    batter_weight: float,
+    pitch_selection_str: str,
+    base_velocity: float,
+    base_movement: float
+) -> tuple[float, float]:
+    """
+    Calculates batter vs. pitcher matchups based on raw pitch profiles.
+    """
+    arsenal = PitcherArsenal(pitch_selection_str, base_velocity, base_movement)
+    
+    total_obp_adj = 0.0
+    total_slg_adj = 0.0
+    
+    for pitch_name, m in arsenal.pitches.items():
+        weight = m["percentage"]
+        vel = m["velocity"]
+        spin = m["spin_rate"]
+        h_break = m["h_break"]
+        v_break = m["v_break"]
+        
+        obp_adj = 0.0
+        slg_adj = 0.0
+        
+        if pitch_name == "Fastball":
+            # Uppercut hitters struggle against high spin/high velocity fastballs
+            if vel > 95.0 and batter_swing_angle > 18.0:
+                obp_adj -= 0.025 * (vel - 94.0) * (batter_swing_angle - 17.0) * 0.04
+                slg_adj -= 0.045 * (vel - 94.0) * (batter_swing_angle - 17.0) * 0.04
+            # Slow swing speeds struggle against high velocity
+            if vel > 95.0 and batter_swing_speed < 72.0:
+                obp_adj -= 0.035 * (73.0 - batter_swing_speed) * 0.04
+                slg_adj -= 0.055 * (73.0 - batter_swing_speed) * 0.04
+            # Heavy bats struggle slightly against extreme velocity but hit hard if they connect
+            if vel > 97.0 and batter_weight > 31.0:
+                obp_adj -= 0.012
+                slg_adj += 0.018
+                
+        elif pitch_name == "Slider":
+            # Hitter with steep launch angle struggles against sweepers
+            if h_break > 10.0 and batter_swing_angle > 15.0:
+                obp_adj -= 0.020 * (h_break - 9.0) * 0.08
+                slg_adj -= 0.035 * (h_break - 9.0) * 0.08
+                
+        elif pitch_name == "Curveball":
+            # Flat swing angles struggle against vertical drop curveballs
+            if abs(v_break) > 10.0 and batter_swing_angle < 12.0:
+                obp_adj -= 0.015 * (abs(v_break) - 9.0) * 0.08
+                slg_adj -= 0.025 * (abs(v_break) - 9.0) * 0.08
+                
+        elif pitch_name == "Changeup":
+            # Fast swing speed hitters can be fooled by changeups
+            if batter_swing_speed > 75.0:
+                obp_adj -= 0.015
+                slg_adj -= 0.025
+                
+        total_obp_adj += weight * obp_adj
+        total_slg_adj += weight * slg_adj
+        
+    final_obp = max(0.100, min(0.900, base_obp + total_obp_adj))
+    final_slg = max(0.100, base_slg + total_slg_adj)
+    return final_obp, final_slg
+
+
+def apply_in_game_pitcher_decay(
+    base_command: float,
+    base_movement: float,
+    base_velocity: float,
+    times_faced: int,
+    pitch_count: int
+) -> tuple[float, float, float]:
+    """
+    Applies performance penalties based on times through order and pitch count.
+    """
+    decayed_command = base_command
+    decayed_movement = base_movement
+    decayed_velocity = base_velocity
+    
+    if times_faced == 2:
+        decayed_command *= 0.95
+        decayed_movement *= 0.95
+        decayed_velocity -= 0.5
+    elif times_faced == 3:
+        decayed_command *= 0.88
+        decayed_movement *= 0.90
+        decayed_velocity -= 1.5
+    elif times_faced >= 4:
+        decayed_command *= 0.80
+        decayed_movement *= 0.82
+        decayed_velocity -= 3.0
+        
+    if pitch_count > 105:
+        decayed_velocity *= 0.95
+        decayed_command *= 0.85
+    elif pitch_count > 90:
+        decayed_velocity *= 0.975
+        decayed_command *= 0.93
+    elif pitch_count > 75:
+        decayed_velocity *= 0.99
+        decayed_command *= 0.97
+        
+    return max(0.1, decayed_command), max(0.1, decayed_movement), max(50.0, decayed_velocity)
+
+
+def get_ballpark_geometry_factor(
+    stadium_name: str,
+    typical_swing_angle: float,
+    batter_handedness: str,
+    base_obp: float,
+    base_slg: float
+) -> tuple[float, float]:
+    """
+    Adjusts projections based on ballpark dimensions and spray charts.
+    """
+    BALLPARK_GEOMETRY = {
+        "wrigley field": {
+            "obp_scale": 1.01, "slg_scale": 1.02,
+            "spray_adjustments": {"pull": 1.02, "center": 1.0, "oppo": 0.98}
+        },
+        "fenway park": {
+            "obp_scale": 1.03, "slg_scale": 1.05,
+            "spray_adjustments": {"pull": 1.06, "center": 0.95, "oppo": 1.03} # Green Monster effect
+        },
+        "coors field": {
+            "obp_scale": 1.12, "slg_scale": 1.18, # Altitude carry
+            "spray_adjustments": {"pull": 1.10, "center": 1.15, "oppo": 1.10}
+        },
+        "default": {
+            "obp_scale": 1.0, "slg_scale": 1.0,
+            "spray_adjustments": {"pull": 1.0, "center": 1.0, "oppo": 1.0}
+        }
+    }
+    
+    stadium_key = stadium_name.lower().strip()
+    match_details = BALLPARK_GEOMETRY["default"]
+    for key, data in BALLPARK_GEOMETRY.items():
+        if key in stadium_key:
+            match_details = data
+            break
+            
+    # Hitter pull/center/oppo propensity
+    # High swing angle hitters tend to pull more.
+    is_pull_dominant = typical_swing_angle > 18.0
+    
+    if is_pull_dominant:
+        spray_mult = match_details["spray_adjustments"]["pull"]
+    else:
+        spray_mult = match_details["spray_adjustments"]["center"]
+        
+    adj_obp = base_obp * match_details["obp_scale"] * spray_mult
+    adj_slg = base_slg * match_details["slg_scale"] * spray_mult
+    
+    return round(adj_obp, 3), round(adj_slg, 3)
+
+
+def run_stochastic_monte_carlo(lineup_players: list, games: int = 10000) -> dict:
+    """
+    Stochastic Monte Carlo simulation engine using Markov chain state-transition model.
+    """
+    import random
+    
+    run_counts = {}
+    total_runs = 0
+    blowout_innings_count = 0
+    ninth_inning_successes = 0
+    
+    # Precompute probabilities for each batter
+    batter_probs = []
+    for p in lineup_players:
+        obp = p["adjusted_obp"]
+        slg = p["adjusted_slg"]
+        
+        p_bb = obp * 0.30
+        p_hit = max(0.0, obp - p_bb)
+        p_out = max(0.0, 1.0 - obp)
+        
+        # Distribute hits
+        p_hr = max(0.01, 0.12 * (slg - obp))
+        p_3b = p_hit * 0.02
+        p_2b = p_hit * 0.20
+        p_1b = max(0.0, p_hit - p_hr - p_3b - p_2b)
+        
+        # Normalize
+        total_p = p_out + p_bb + p_1b + p_2b + p_3b + p_hr
+        if total_p > 0:
+            p_out /= total_p
+            p_bb /= total_p
+            p_1b /= total_p
+            p_2b /= total_p
+            p_3b /= total_p
+            p_hr /= total_p
+            
+        batter_probs.append({
+            "outcomes": ["OUT", "BB", "1B", "2B", "3B", "HR"],
+            "weights": [p_out, p_bb, p_1b, p_2b, p_3b, p_hr]
+        })
+        
+    for _ in range(games):
+        game_runs = 0
+        batter_idx = 0
+        game_had_blowout = False
+        
+        # 9 Innings
+        for inning in range(1, 10):
+            inning_runs = 0
+            outs = 0
+            # Bases: [1B, 2B, 3B]
+            bases = [False, False, False]
+            
+            while outs < 3:
+                # Get outcome
+                bp = batter_probs[batter_idx]
+                outcome = random.choices(bp["outcomes"], weights=bp["weights"])[0]
+                batter_idx = (batter_idx + 1) % 9
+                
+                if outcome == "OUT":
+                    outs += 1
+                elif outcome == "BB":
+                    if bases[0]:
+                        if bases[1]:
+                            if bases[2]:
+                                inning_runs += 1
+                            else:
+                                bases[2] = True
+                        else:
+                            bases[1] = True
+                    else:
+                        bases[0] = True
+                elif outcome == "1B":
+                    if bases[2]:
+                        inning_runs += 1
+                        bases[2] = False
+                    if bases[1]:
+                        if random.random() < 0.6:
+                            inning_runs += 1
+                        else:
+                            bases[2] = True
+                        bases[1] = False
+                    if bases[0]:
+                        if random.random() < 0.3:
+                            bases[2] = True
+                        else:
+                            bases[1] = True
+                    bases[0] = True
+                elif outcome == "2B":
+                    if bases[2]:
+                        inning_runs += 1
+                        bases[2] = False
+                    if bases[1]:
+                        inning_runs += 1
+                        bases[1] = False
+                    if bases[0]:
+                        if random.random() < 0.4:
+                            inning_runs += 1
+                        else:
+                            bases[2] = True
+                        bases[0] = False
+                    bases[1] = True
+                elif outcome == "3B":
+                    inning_runs += sum(1 for r in bases if r)
+                    bases = [False, False, True]
+                elif outcome == "HR":
+                    inning_runs += 1 + sum(1 for r in bases if r)
+                    bases = [False, False, False]
+                    
+            if inning_runs >= 4:
+                game_had_blowout = True
+            game_runs += inning_runs
+            
+        run_counts[game_runs] = run_counts.get(game_runs, 0) + 1
+        total_runs += game_runs
+        if game_had_blowout:
+            blowout_innings_count += 1
+            
+        # Simulate bottom of the 9th scenario (need 1 run to win, starting 0 outs, bases empty)
+        bases_9 = [False, False, False]
+        outs_9 = 0
+        runs_9 = 0
+        while outs_9 < 3 and runs_9 < 1:
+            bp = batter_probs[batter_idx]
+            outcome = random.choices(bp["outcomes"], weights=bp["weights"])[0]
+            batter_idx = (batter_idx + 1) % 9
+            
+            if outcome == "OUT":
+                outs_9 += 1
+            elif outcome == "BB":
+                if bases_9[0]:
+                    if bases_9[1]:
+                        if bases_9[2]:
+                            runs_9 += 1
+                        else:
+                            bases_9[2] = True
+                    else:
+                        bases_9[1] = True
+                else:
+                    bases_9[0] = True
+            elif outcome == "1B":
+                if bases_9[2]:
+                    runs_9 += 1
+                    bases_9[2] = False
+                if bases_9[1]:
+                    if random.random() < 0.6:
+                        runs_9 += 1
+                    else:
+                        bases_9[2] = True
+                    bases_9[1] = False
+                if bases_9[0]:
+                    if random.random() < 0.3:
+                        bases_9[2] = True
+                    else:
+                        bases_9[1] = True
+                bases_9[0] = True
+            elif outcome == "2B":
+                if bases_9[2]:
+                    runs_9 += 1
+                    bases_9[2] = False
+                if bases_9[1]:
+                    runs_9 += 1
+                    bases_9[1] = False
+                if bases_9[0]:
+                    if random.random() < 0.4:
+                        runs_9 += 1
+                    else:
+                        bases_9[2] = True
+                    bases_9[0] = False
+                bases_9[1] = True
+            elif outcome == "3B":
+                runs_9 += sum(1 for r in bases_9 if r)
+                bases_9 = [False, False, True]
+            elif outcome == "HR":
+                runs_9 += 1 + sum(1 for r in bases_9 if r)
+                bases_9 = [False, False, False]
+                
+        if runs_9 >= 1:
+            ninth_inning_successes += 1
+            
+    # Format distribution
+    dist = {}
+    for r in sorted(run_counts.keys()):
+        dist[str(r)] = round(run_counts[r] / games, 4)
+        
+    return {
+        "expected_runs": round(total_runs / games, 2),
+        "blowout_probability": round(blowout_innings_count / games, 4),
+        "ninth_inning_win_probability": round(ninth_inning_successes / games, 4),
+        "runs_distribution": dist
+    }
+

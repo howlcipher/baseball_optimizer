@@ -33,7 +33,7 @@ from app.schemas import (
 )
 from app.config import load_config, save_config
 from app.scrapers import fetch_team_roster
-from app.calculator import calculate_true_projection
+from app.calculator import calculate_true_projection, get_position_swap_penalty
 
 # Setup logging directories and handlers
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -631,11 +631,12 @@ def optimize_lineup(
     runner_on_3b: bool = Query(False),
     pitch_count_in_at_bat: int = Query(0),
     inning: int = Query(1),
+    opposing_pitcher_pitch_count: int = Query(0, description="Pitcher's total game pitch count"),
     db: Session = Depends(get_db)
 ):
     """
-    Ingests parameters for opposing pitcher handedness and situational leverage.
-    Returns a dynamically sorted, 1-through-9 batting order optimized by calculated score variations.
+    Ingests parameters for opposing pitcher and situational context.
+    Returns optimized batting order using togglable advanced model configurations.
     """
     team = get_active_team(db)
     
@@ -648,23 +649,116 @@ def optimize_lineup(
     if not players:
         raise HTTPException(status_code=400, detail="Roster is empty. Please swap context to reset players.")
 
-    logger.info(f"Optimizing roster lineup for {team.name} against pitcher hand '{opposing_pitcher_handedness}' under leverage '{situational_leverage}'...")
+    # Load settings configuration
+    config = load_config()
+    use_pitch_mix_model = config.get("use_pitch_mix_model", False)
+    use_ttop_fatigue = config.get("use_ttop_fatigue", False)
+    use_monte_carlo = config.get("use_monte_carlo", False)
+    use_net_run_defense = config.get("use_net_run_defense", False)
+    use_workload_rest = config.get("use_workload_rest", False)
+
+    logger.info(f"Optimizing roster lineup for {team.name} using config overrides...")
+
+    # Determine pitch count and times faced
+    pitch_count = opposing_pitcher_pitch_count if opposing_pitcher_pitch_count > 0 else max(0, (inning - 1) * 15 + pitch_count_in_at_bat)
+    
+    # 5. Workload Rest Constraints
+    rested_player_names = []
+    must_rest_names = []
+    available_players = [p for p in players if p.position.upper() != "P"]
+    
+    if use_workload_rest:
+        for p in available_players:
+            if p.cumulative_days_played >= (mgr.fatigue_threshold + 2):
+                must_rest_names.append(p.name)
+        
+        # Keep at least 9 fielders
+        if len(available_players) - len(must_rest_names) >= 9:
+            rested_player_names = must_rest_names
+        else:
+            sorted_fatigued = sorted(available_players, key=lambda p: p.cumulative_days_played, reverse=True)
+            for p in sorted_fatigued:
+                if p.cumulative_days_played >= (mgr.fatigue_threshold + 2):
+                    if len(available_players) - len(rested_player_names) > 9:
+                        rested_player_names.append(p.name)
+
+    roster_availability_results = {
+        "rested_players": rested_player_names,
+        "fatigued_active_players": [
+            p.name for p in available_players
+            if p.cumulative_days_played > mgr.fatigue_threshold and p.name not in rested_player_names
+        ]
+    }
 
     scored_players = []
-    for player in players:
-        # Skip pitchers
-        if player.position.upper() == "P":
+    for player in available_players:
+        if use_workload_rest and player.name in rested_player_names:
             continue
             
-        # 1. Apply Platoon splits to base metrics
-        obp_platoon, slg_platoon = apply_platoon_splits(
-            player.base_obp,
-            player.base_slg,
-            player.batting_handedness,
-            opposing_pitcher_handedness
-        )
+        # Cumulative days workload penalty
+        base_obp = player.base_obp
+        base_slg = player.base_slg
+        if use_workload_rest and player.cumulative_days_played > mgr.fatigue_threshold:
+            base_obp *= 0.95
+            base_slg *= 0.95
+
+        # 2. In-Game Pitcher Decay & TTOP
+        actual_times_faced = 1
+        if opposing_pitcher_type.strip().lower() == "starter":
+            if inning <= 3:
+                actual_times_faced = 1
+            elif inning <= 5:
+                actual_times_faced = 2
+            elif inning <= 7:
+                actual_times_faced = 3
+            else:
+                actual_times_faced = 4
+                
+        if use_ttop_fatigue:
+            from app.calculator import apply_in_game_pitcher_decay
+            decay_cmd, decay_mvt, decay_vel = apply_in_game_pitcher_decay(
+                opposing_pitcher_command,
+                opposing_pitcher_movement,
+                opposing_pitcher_velocity,
+                actual_times_faced,
+                pitch_count
+            )
+        else:
+            decay_cmd, decay_mvt, decay_vel = opposing_pitcher_command, opposing_pitcher_movement, opposing_pitcher_velocity
+
+        # 1. Pitch-Mix Matchup Model
+        if use_pitch_mix_model:
+            from app.calculator import simulate_pitch_mix_matchup
+            obp_platoon, slg_platoon = simulate_pitch_mix_matchup(
+                base_obp=base_obp,
+                base_slg=base_slg,
+                batter_swing_angle=player.typical_swing_angle,
+                batter_swing_speed=player.bat_swing_speed,
+                batter_weight=player.bat_weight,
+                pitch_selection_str=opposing_pitcher_pitch_selection,
+                base_velocity=decay_vel,
+                base_movement=decay_mvt
+            )
+        else:
+            obp_platoon, slg_platoon = apply_platoon_splits(
+                base_obp,
+                base_slg,
+                player.batting_handedness,
+                opposing_pitcher_handedness
+            )
+            
+        # 4. Ballpark Geometry scale
+        if use_net_run_defense:
+            from app.calculator import get_ballpark_geometry_factor
+            obp_platoon, slg_platoon = get_ballpark_geometry_factor(
+                stadium_name=team.stadium_name,
+                typical_swing_angle=player.typical_swing_angle,
+                batter_handedness=player.batting_handedness,
+                base_obp=obp_platoon,
+                base_slg=slg_platoon
+            )
         
-        # 2. Run Optimization over Batter Stance and Grip overrides
+        # Run Stance/Grip Optimizer
         best_ops = -1.0
         best_factors = None
         best_stance = player.stand_in_box
@@ -685,7 +779,6 @@ def optimize_lineup(
                     elevation=team.elevation,
                     wind_direction=env.wind_direction,
                     wind_velocity=env.wind_velocity,
-                    # Batter Physical Parameters
                     typical_swing_angle=player.typical_swing_angle,
                     bat_swing_speed=player.bat_swing_speed,
                     choke_up=test_choke,
@@ -695,16 +788,14 @@ def optimize_lineup(
                     runners_on_base_modifier=player.runners_on_base_modifier,
                     game_progression_fatigue_rate=player.game_progression_fatigue_rate,
                     at_bat_progression_decay=player.at_bat_progression_decay,
-                    # Pitcher Parameters
                     pitcher_arm_angle=opposing_pitcher_arm_angle,
                     pitcher_rubber_position=opposing_pitcher_rubber_position,
-                    pitcher_velocity=opposing_pitcher_velocity,
-                    pitcher_command=opposing_pitcher_command,
-                    pitcher_movement=opposing_pitcher_movement,
+                    pitcher_velocity=decay_vel,
+                    pitcher_command=decay_cmd,
+                    pitcher_movement=decay_mvt,
                     pitcher_windup_efficiency=opposing_pitcher_windup_efficiency,
                     pitcher_pitch_selection=opposing_pitcher_pitch_selection,
                     pitcher_pitch_location=opposing_pitcher_pitch_location,
-                    # Situational Context
                     runner_on_1b=runner_on_1b,
                     runner_on_2b=runner_on_2b,
                     runner_on_3b=runner_on_3b,
@@ -712,10 +803,8 @@ def optimize_lineup(
                     inning=inning,
                     batter_handedness=player.batting_handedness,
                     pitcher_handedness=opposing_pitcher_handedness,
-                    # Natural Batter traits
                     natural_choke_up=player.choke_up,
                     natural_stand_in_box=player.stand_in_box,
-                    # Natural Pitcher traits
                     pitcher_natural_arm_angle=opposing_pitcher_natural_arm_angle,
                     pitcher_natural_rubber_position=opposing_pitcher_natural_rubber_position,
                     temperature=env.temperature,
@@ -726,6 +815,7 @@ def optimize_lineup(
                     roof_closed=team.roof_closed,
                     game_hour=env.game_hour,
                     is_night_game=env.is_night_game,
+                    times_faced=1 if use_ttop_fatigue else actual_times_faced,
                     pitcher_type=opposing_pitcher_type,
                     focus_state=player.focus_state,
                     swing_path_adjustment=player.swing_path_adjustment,
@@ -780,7 +870,6 @@ def optimize_lineup(
                 "psych_modifier": best_factors["psych_modifier"],
                 "ballpark_factor": best_factors["ballpark_factor"],
                 "wind_bonus_slg": best_factors["wind_bonus_slg"],
-                # Details
                 "location_obp_mod": best_factors.get("location_obp_mod", 1.0),
                 "location_slg_mod": best_factors.get("location_slg_mod", 1.0),
                 "angle_obp_mod": best_factors.get("angle_obp_mod", 0.0),
@@ -804,55 +893,101 @@ def optimize_lineup(
                 "batter_grip_toll_applied": best_factors.get("batter_grip_toll_applied", False)
             }
         })
+
+    # Helper function for defensive runs allowed evaluation
+    def get_defensive_value(player_obj, assigned_pos: str) -> float:
+        if assigned_pos == "DH":
+            return 0.0
+        if assigned_pos == "C":
+            return (player_obj.framing_rating - 0.5) * 8.0 + (2.0 - player_obj.pop_time) * 4.0
         
-    # Sort players by adjusted OPS descending
-    scored_players.sort(key=lambda x: x["adjusted_ops"], reverse=True)
-    
-    # Select the top 9 candidates
-    top_9_candidates = scored_players[:9]
-    
-    # Find the optimal mapping to C, 1B, 2B, 3B, SS, LF, CF, RF, DH (Assignment Problem)
+        base_def = float(player_obj.outs_above_average)
+        p_pos = player_obj.position.upper().strip()
+        a_pos = assigned_pos.upper().strip()
+        if p_pos == a_pos:
+            return base_def
+            
+        inf = {"1B", "2B", "3B", "SS", "IF"}
+        out = {"LF", "CF", "RF", "OF"}
+        
+        if p_pos in inf and a_pos in inf:
+            return base_def - 1.5
+        if p_pos in out and a_pos in out:
+            return base_def - 1.5
+        return base_def - 4.0
+
+    player_map = {p.id: p for p in available_players}
     positions_pool = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH"]
-    best_assignment = {}
-    best_sum_ops = -1.0
-    
+
+    # Compute max net runs / ops value for sorting the candidates
+    for sp in scored_players:
+        p_obj = player_map[sp["player_id"]]
+        max_nr = -999.0
+        for pos in positions_pool:
+            obp_pen, slg_pen = get_position_swap_penalty(sp["position"], pos)
+            adj_obp = max(0.0, sp["adjusted_obp"] - obp_pen)
+            adj_slg = max(0.0, sp["adjusted_slg"] - slg_pen)
+            ops = adj_obp + adj_slg
+            net_runs = (1.15 * ops) + get_defensive_value(p_obj, pos)
+            if net_runs > max_nr:
+                max_nr = net_runs
+        sp["max_net_runs"] = max_nr
+
+    # Sort candidates
+    if use_net_run_defense:
+        scored_players.sort(key=lambda x: x["max_net_runs"], reverse=True)
+    else:
+        scored_players.sort(key=lambda x: x["adjusted_ops"], reverse=True)
+        
+    top_9_candidates = scored_players[:9]
+
+    # Precompute positions map
     player_ops_at_pos = {}
     for p in top_9_candidates:
         player_ops_at_pos[p["player_id"]] = {}
+        p_obj = player_map[p["player_id"]]
         for pos in positions_pool:
-            from app.calculator import get_position_swap_penalty
             obp_pen, slg_pen = get_position_swap_penalty(p["position"], pos)
             adj_obp_at_pos = max(0.0, p["adjusted_obp"] - obp_pen)
             adj_slg_at_pos = max(0.0, p["adjusted_slg"] - slg_pen)
+            ops_val = adj_obp_at_pos + adj_slg_at_pos
+            
+            if use_net_run_defense:
+                val = (1.15 * ops_val) + get_defensive_value(p_obj, pos)
+            else:
+                val = ops_val
+                
             player_ops_at_pos[p["player_id"]][pos] = {
+                "val": val,
                 "obp": adj_obp_at_pos,
                 "slg": adj_slg_at_pos,
-                "ops": adj_obp_at_pos + adj_slg_at_pos,
+                "ops": ops_val,
                 "obp_pen": obp_pen,
                 "slg_pen": slg_pen
             }
 
+    # Bounded backtrack search
     current_assignment = {}
     assigned_positions = set()
     
-    # Precompute maximum possible OPS per player to implement Branch and Bound pruning
-    max_ops_per_player = [
-        max(player_ops_at_pos[p["player_id"]][pos]["ops"] for pos in positions_pool)
+    max_val_per_player = [
+        max(player_ops_at_pos[p["player_id"]][pos]["val"] for pos in positions_pool)
         for p in top_9_candidates
     ]
-    suffix_max_ops = [0.0] * 10
+    suffix_max_val = [0.0] * 10
     for i in range(8, -1, -1):
-        suffix_max_ops[i] = suffix_max_ops[i+1] + max_ops_per_player[i]
+        suffix_max_val[i] = suffix_max_val[i+1] + max_val_per_player[i]
+        
+    best_sum_val = -999.0
+    best_assignment = {}
     
     def backtrack(idx, current_sum):
-        nonlocal best_sum_ops, best_assignment
-        # Pruning check: can the remaining players possibly push us past the current best?
-        if current_sum + suffix_max_ops[idx] <= best_sum_ops:
+        nonlocal best_sum_val, best_assignment
+        if current_sum + suffix_max_val[idx] <= best_sum_val:
             return
-            
         if idx == len(top_9_candidates):
-            if current_sum > best_sum_ops:
-                best_sum_ops = current_sum
+            if current_sum > best_sum_val:
+                best_sum_val = current_sum
                 best_assignment = current_assignment.copy()
             return
             
@@ -862,29 +997,29 @@ def optimize_lineup(
             if pos not in assigned_positions:
                 assigned_positions.add(pos)
                 current_assignment[p_id] = pos
-                
-                ops_val = player_ops_at_pos[p_id][pos]["ops"]
-                backtrack(idx + 1, current_sum + ops_val)
-                
+                val = player_ops_at_pos[p_id][pos]["val"]
+                backtrack(idx + 1, current_sum + val)
                 current_assignment.pop(p_id)
                 assigned_positions.remove(pos)
                 
     backtrack(0, 0.0)
     
-    # Construct OptimizedLineupPlayer instances with their assigned positions
+    # Construct final lineup players list
     lineup_players = []
     for sp in top_9_candidates:
         assigned_pos = best_assignment[sp["player_id"]]
         pos_data = player_ops_at_pos[sp["player_id"]][assigned_pos]
+        p_obj = player_map[sp["player_id"]]
         
-        # Update details in factors dict
         factors_copy = sp["factors"].copy()
         factors_copy["position_swap_obp_penalty"] = round(pos_data["obp_pen"], 3)
         factors_copy["position_swap_slg_penalty"] = round(pos_data["slg_pen"], 3)
         
+        net_run_val = (1.15 * pos_data["ops"]) + get_defensive_value(p_obj, assigned_pos)
+        
         lineup_players.append(
             OptimizedLineupPlayer(
-                batting_order=0,  # Placeholder, will assign below after sorting
+                batting_order=0,
                 player_id=sp["player_id"],
                 name=sp["name"],
                 position=sp["position"],
@@ -902,20 +1037,50 @@ def optimize_lineup(
                 bat_weight=sp["bat_weight"],
                 stand_in_box=sp["stand_in_box"],
                 optimized_stance=sp["optimized_stance"],
-                optimized_choke_up=sp["optimized_choke_up"]
+                optimized_choke_up=sp["optimized_choke_up"],
+                net_runs=round(net_run_val, 3)
             )
         )
         
-    # Sort the final lineup by post-position-swap adjusted_ops descending
-    lineup_players.sort(key=lambda p: p.adjusted_ops, reverse=True)
+    # Sort lineup
+    if use_net_run_defense:
+        lineup_players.sort(key=lambda p: p.net_runs if p.net_runs is not None else p.adjusted_ops, reverse=True)
+    else:
+        lineup_players.sort(key=lambda p: p.adjusted_ops, reverse=True)
+        
     for idx, p in enumerate(lineup_players, 1):
         p.batting_order = idx
         
+    # 3. Monte Carlo Simulation Engine
+    monte_carlo_results = None
+    if use_monte_carlo:
+        from app.calculator import run_stochastic_monte_carlo
+        lineup_dicts = []
+        for lp in lineup_players:
+            lineup_dicts.append({
+                "adjusted_obp": lp.adjusted_obp,
+                "adjusted_slg": lp.adjusted_slg
+            })
+        monte_carlo_results = run_stochastic_monte_carlo(lineup_dicts, games=10000)
+
+    ballpark_geometry_results = None
+    if use_net_run_defense:
+        ballpark_geometry_results = {
+            "stadium_name": team.stadium_name,
+            "elevation": team.elevation,
+            "is_dome": team.is_dome,
+            "roof_closed": team.roof_closed,
+            "base_park_factor": team.base_park_factor
+        }
+
     return LineupOptimizationResponse(
         opposing_pitcher_handedness=opposing_pitcher_handedness,
         situational_leverage=situational_leverage,
         team_name=team.name,
-        optimized_lineup=lineup_players
+        optimized_lineup=lineup_players,
+        monte_carlo_results=monte_carlo_results,
+        ballpark_geometry_results=ballpark_geometry_results,
+        roster_availability_results=roster_availability_results if use_workload_rest else None
     )
 
 

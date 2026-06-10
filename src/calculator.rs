@@ -1242,6 +1242,39 @@ pub fn run_stochastic_monte_carlo(lineup_players: &[MonteCarloPlayerInput], game
                 let outcome = bp.outcomes[outcome_idx];
                 batter_idx = (batter_idx + 1) % 9;
 
+                // Feature 3: The Chaos Factor (Quirk & Extreme Variance Simulator)
+                let chaos_roll: f64 = rng.gen_range(0.0..1.0);
+                if chaos_roll < 0.005 {
+                    // 0.5% chance per PA for a high-impact anomaly
+                    let chaos_type = rng.gen_range(0..4);
+                    match chaos_type {
+                        0 => { // Inside-the-park HR or 3-base error
+                            inning_runs += 1 + bases.iter().filter(|&&r| r).count();
+                            bases = vec![false, false, false];
+                        }
+                        1 => { // Wild pitch / Passed ball -> advance runners
+                            if bases[2] { inning_runs += 1; bases[2] = false; }
+                            if bases[1] { bases[2] = true; bases[1] = false; }
+                            if bases[0] { bases[1] = true; bases[0] = false; }
+                        }
+                        2 => { // Throwing error on routine out -> Batter safe, runners advance
+                            if bases[2] { inning_runs += 1; bases[2] = false; }
+                            if bases[1] { bases[2] = true; bases[1] = false; }
+                            if bases[0] { bases[1] = true; }
+                            bases[0] = true;
+                        }
+                        _ => { // Dropped 3rd strike or fan interference
+                            if outs < 2 && (bases[0] || bases[1] || bases[2]) {
+                                outs += 2; // rare weird double play or baserunning blunder
+                                bases = vec![false, false, false];
+                            } else {
+                                outs += 1;
+                            }
+                        }
+                    }
+                    continue;
+                }
+
                 match outcome {
                     "OUT" => {
                         outs += 1;
@@ -1336,6 +1369,37 @@ pub fn run_stochastic_monte_carlo(lineup_players: &[MonteCarloPlayerInput], game
             let outcome = bp.outcomes[outcome_idx];
             batter_idx = (batter_idx + 1) % 9;
 
+            let chaos_roll: f64 = rng.gen_range(0.0..1.0);
+            if chaos_roll < 0.005 {
+                let chaos_type = rng.gen_range(0..4);
+                match chaos_type {
+                    0 => {
+                        runs_9 += 1 + bases_9.iter().filter(|&&r| r).count();
+                        bases_9 = vec![false, false, false];
+                    }
+                    1 => {
+                        if bases_9[2] { runs_9 += 1; bases_9[2] = false; }
+                        if bases_9[1] { bases_9[2] = true; bases_9[1] = false; }
+                        if bases_9[0] { bases_9[1] = true; bases_9[0] = false; }
+                    }
+                    2 => {
+                        if bases_9[2] { runs_9 += 1; bases_9[2] = false; }
+                        if bases_9[1] { bases_9[2] = true; bases_9[1] = false; }
+                        if bases_9[0] { bases_9[1] = true; }
+                        bases_9[0] = true;
+                    }
+                    _ => {
+                        if outs_9 < 2 && (bases_9[0] || bases_9[1] || bases_9[2]) {
+                            outs_9 += 2;
+                            bases_9 = vec![false, false, false];
+                        } else {
+                            outs_9 += 1;
+                        }
+                    }
+                }
+                continue;
+            }
+
             match outcome {
                 "OUT" => {
                     outs_9 += 1;
@@ -1424,5 +1488,659 @@ pub fn run_stochastic_monte_carlo(lineup_players: &[MonteCarloPlayerInput], game
         blowout_probability: ((blowout_innings_count as f64) / (games as f64) * 10000.0).round() / 10000.0,
         ninth_inning_win_probability: ((ninth_inning_successes as f64) / (games as f64) * 10000.0).round() / 10000.0,
         runs_distribution: dist,
+    }
+}
+
+use crate::db::Player;
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TeamRosterMetrics {
+    pub team_id: i32,
+    pub active_count: i32,
+    pub expanded_count: i32,
+    pub aaa_count: i32,
+    pub aa_count: i32,
+    pub a_count: i32,
+    pub total_active_payroll: f64,
+    pub payroll_flexibility: f64,
+    pub team_replacement_value: f64,
+    pub position_depth: HashMap<String, i32>,
+}
+
+pub fn calculate_roster_metrics(team_id: i32, players: &[Player]) -> TeamRosterMetrics {
+    let mut active_count = 0;
+    let mut expanded_count = 0;
+    let mut aaa_count = 0;
+    let mut aa_count = 0;
+    let mut a_count = 0;
+    let mut total_active_payroll = 0.0;
+    let mut team_replacement_value = 0.0;
+    let mut position_depth = HashMap::new();
+
+    for p in players {
+        let level = p.roster_level.to_uppercase();
+        if level == "ACTIVE" {
+            active_count += 1;
+            expanded_count += 1;
+            total_active_payroll += p.salary;
+            
+            let p_val = if p.position == "P" {
+                p.pitcher_command + p.pitcher_movement + (p.outs_above_average as f64 * 0.05)
+            } else {
+                p.base_ops + (p.outs_above_average as f64 * 0.02)
+            };
+            team_replacement_value += p_val;
+
+            *position_depth.entry(p.position.clone()).or_insert(0) += 1;
+        } else if level == "EXPANDED" {
+            expanded_count += 1;
+            total_active_payroll += p.salary * 0.20;
+        } else if level == "AAA" {
+            aaa_count += 1;
+        } else if level == "AA" {
+            aa_count += 1;
+        } else if level == "A" {
+            a_count += 1;
+        }
+    }
+
+    let budget = 150_000_000.0;
+    let payroll_flexibility = budget - total_active_payroll;
+
+    TeamRosterMetrics {
+        team_id,
+        active_count,
+        expanded_count,
+        aaa_count,
+        aa_count,
+        a_count,
+        total_active_payroll,
+        payroll_flexibility,
+        team_replacement_value: (team_replacement_value * 100.0).round() / 100.0,
+        position_depth,
+    }
+}
+
+pub fn calculate_win_probability(
+    half_inning: &str,
+    inning: i32,
+    outs: i32,
+    bases: &[bool; 3],
+    score_diff: i32,
+) -> f64 {
+    if inning >= 9 {
+        if half_inning.to_lowercase() == "top" && outs == 3 {
+            if score_diff > 0 { return 1.0; }
+            if score_diff < 0 { return 0.0; }
+        }
+        if half_inning.to_lowercase() == "bottom" {
+            if score_diff > 0 { return 1.0; }
+            if outs == 3 && score_diff < 0 { return 0.0; }
+        }
+    }
+
+    let remaining_half_innings = if half_inning.to_lowercase() == "top" {
+        (18 - (2 * inning - 1)).max(1)
+    } else {
+        (18 - (2 * inning)).max(1)
+    };
+
+    let out_idx = outs.clamp(0, 2) as usize;
+    let base_code = (bases[0] as usize) + (bases[1] as usize * 2) + (bases[2] as usize * 4);
+    let run_expectancy_matrix = [
+        [0.50, 0.90, 1.10, 1.50, 1.40, 1.80, 2.00, 2.30],
+        [0.30, 0.50, 0.70, 1.00, 0.90, 1.20, 1.40, 1.60],
+        [0.10, 0.20, 0.30, 0.40, 0.40, 0.50, 0.60, 0.80],
+    ];
+    let er = run_expectancy_matrix[out_idx][base_code.clamp(0, 7)];
+
+    let score_adj = if half_inning.to_lowercase() == "top" {
+        score_diff as f64 - er
+    } else {
+        score_diff as f64 + er
+    };
+
+    let k = 0.55;
+    let wp = 1.0 / (1.0 + (-k * score_adj / (remaining_half_innings as f64).sqrt()).exp());
+    wp.clamp(0.01, 0.99)
+}
+
+pub fn calculate_wpa_outcomes(
+    half_inning: &str,
+    inning: i32,
+    outs: i32,
+    bases: &[bool; 3],
+    score_diff: i32,
+) -> HashMap<String, f64> {
+    let current_wp = calculate_win_probability(half_inning, inning, outs, bases, score_diff);
+    let outcomes = vec!["strikeout", "walk", "single", "double", "triple", "home_run", "out"];
+    let mut results = HashMap::new();
+
+    for outcome in outcomes {
+        let mut next_half_inning = half_inning.to_string();
+        let mut next_inning = inning;
+        let mut next_outs = outs;
+        let mut next_bases = bases.clone();
+        let mut runs_scored = 0;
+
+        match outcome {
+            "strikeout" | "out" => {
+                next_outs += 1;
+                if next_outs >= 3 {
+                    next_outs = 0;
+                    next_bases = [false; 3];
+                    if half_inning.to_lowercase() == "top" {
+                        next_half_inning = "Bottom".to_string();
+                    } else {
+                        next_half_inning = "Top".to_string();
+                        next_inning += 1;
+                    }
+                }
+            }
+            "walk" => {
+                if !next_bases[0] {
+                    next_bases[0] = true;
+                } else if !next_bases[1] {
+                    next_bases[1] = true;
+                } else if !next_bases[2] {
+                    next_bases[2] = true;
+                } else {
+                    runs_scored += 1;
+                }
+            }
+            "single" => {
+                if next_bases[2] { runs_scored += 1; next_bases[2] = false; }
+                if next_bases[1] { next_bases[2] = true; next_bases[1] = false; }
+                if next_bases[0] { next_bases[1] = true; }
+                next_bases[0] = true;
+            }
+            "double" => {
+                if next_bases[2] { runs_scored += 1; next_bases[2] = false; }
+                if next_bases[1] { runs_scored += 1; next_bases[1] = false; }
+                if next_bases[0] { next_bases[2] = true; next_bases[0] = false; }
+                next_bases[1] = true;
+            }
+            "triple" => {
+                if next_bases[2] { runs_scored += 1; next_bases[2] = false; }
+                if next_bases[1] { runs_scored += 1; next_bases[1] = false; }
+                if next_bases[0] { runs_scored += 1; next_bases[0] = false; }
+                next_bases[2] = true;
+            }
+            "home_run" => {
+                runs_scored += 1;
+                for b in next_bases.iter_mut() {
+                    if *b { runs_scored += 1; *b = false; }
+                }
+            }
+            _ => {}
+        }
+
+        let next_score_diff = if half_inning.to_lowercase() == "top" {
+            score_diff - runs_scored
+        } else {
+            score_diff + runs_scored
+        };
+
+        let new_wp = calculate_win_probability(&next_half_inning, next_inning, next_outs, &next_bases, next_score_diff);
+        let wpa = new_wp - current_wp;
+        results.insert(outcome.to_string(), (wpa * 1000.0).round() / 1000.0);
+    }
+
+    results
+}
+
+pub fn apply_equipment_modifiers(
+    glove: &str,
+    pants: &str,
+    gear: &str,
+    sprint_speed: &mut f64,
+    framing_rating: &mut f64,
+    outs_above_average: &mut i32,
+    fatigue_rate: &mut f64,
+) {
+    match glove.to_lowercase().as_str() {
+        "lightweight" => {
+            *outs_above_average += 1;
+        }
+        "webbed" => {
+            *outs_above_average += 2;
+        }
+        _ => {}
+    }
+
+    match pants.to_lowercase().as_str() {
+        "relaxed" => {
+            *sprint_speed += 0.2;
+        }
+        "tight" => {
+            *sprint_speed += 0.5;
+            *fatigue_rate *= 1.05;
+        }
+        _ => {}
+    }
+
+    match gear.to_lowercase().as_str() {
+        "lightweight" => {
+            *framing_rating += 0.03;
+            *sprint_speed += 0.1;
+        }
+        "heavy" => {
+            *framing_rating -= 0.01;
+            *fatigue_rate *= 1.10;
+        }
+        _ => {}
+    }
+}
+
+pub fn recommend_equipment(position: &str) -> (String, String, String, f64, f64, i32) {
+    let position = position.to_uppercase();
+    if position == "C" {
+        ("Webbed".to_string(), "Tight".to_string(), "Lightweight".to_string(), 0.6, 0.03, 2)
+    } else if position == "CF" || position == "LF" || position == "RF" || position == "SS" || position == "2B" || position == "3B" || position == "1B" {
+        ("Webbed".to_string(), "Tight".to_string(), "Standard".to_string(), 0.5, 0.0, 2)
+    } else {
+        ("Standard".to_string(), "Relaxed".to_string(), "Standard".to_string(), 0.2, 0.0, 0)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TrendReport {
+    pub rolling_expected_runs: Vec<f64>,
+    pub rolling_strikeout_rate: Vec<f64>,
+    pub slugging_distribution: HashMap<String, f64>,
+    pub hot_streak_period: String,
+    pub cold_streak_period: String,
+    pub overall_average_runs: f64,
+}
+
+pub fn simulate_season_trends(lineup: &[MonteCarloPlayerInput]) -> TrendReport {
+    let mut rng = rand::rngs::SmallRng::from_entropy();
+    
+    let mut rolling_expected_runs = Vec::new();
+    let mut rolling_strikeout_rate = Vec::new();
+    let mut game_runs = Vec::new();
+    let mut total_runs = 0.0;
+    
+    let mut zero_runs = 0;
+    let mut one_two_runs = 0;
+    let mut three_four_runs = 0;
+    let mut five_plus_runs = 0;
+
+    for g in 1..=100 {
+        let streak_factor = 1.0 + 0.08 * (g as f64 / 6.0).sin() + rng.gen_range(-0.05..0.05);
+        
+        let adjusted_lineup: Vec<MonteCarloPlayerInput> = lineup.iter().map(|p| {
+            MonteCarloPlayerInput {
+                player_id: p.player_id,
+                name: p.name.clone(),
+                adjusted_obp: (p.adjusted_obp * streak_factor).clamp(0.1, 0.6),
+                adjusted_slg: (p.adjusted_slg * streak_factor).clamp(0.1, 0.8),
+            }
+        }).collect();
+
+        let mc = run_stochastic_monte_carlo(&adjusted_lineup, 100);
+        let day_runs = mc.expected_runs;
+        
+        let base_so = 0.22 - 0.03 * (g as f64 / 10.0).cos() + rng.gen_range(-0.02..0.02);
+        
+        game_runs.push(day_runs);
+        total_runs += day_runs;
+        rolling_expected_runs.push((day_runs * 100.0).round() / 100.0);
+        rolling_strikeout_rate.push((base_so * 1000.0).round() / 1000.0);
+
+        if day_runs < 1.5 {
+            zero_runs += 1;
+        } else if day_runs < 3.5 {
+            one_two_runs += 1;
+        } else if day_runs < 5.5 {
+            three_four_runs += 1;
+        } else {
+            five_plus_runs += 1;
+        }
+    }
+
+    let mut slugging_distribution = HashMap::new();
+    slugging_distribution.insert("0_runs".to_string(), zero_runs as f64 / 100.0);
+    slugging_distribution.insert("1_2_runs".to_string(), one_two_runs as f64 / 100.0);
+    slugging_distribution.insert("3_4_runs".to_string(), three_four_runs as f64 / 100.0);
+    slugging_distribution.insert("5_plus_runs".to_string(), five_plus_runs as f64 / 100.0);
+
+    let mut max_sum = 0.0;
+    let mut min_sum = 99999.0;
+    let mut hot_start = 1;
+    let mut cold_start = 1;
+
+    for i in 0..=90 {
+        let mut sum = 0.0;
+        for j in 0..10 {
+            sum += game_runs[i + j];
+        }
+        if sum > max_sum {
+            max_sum = sum;
+            hot_start = i + 1;
+        }
+        if sum < min_sum {
+            min_sum = sum;
+            cold_start = i + 1;
+        }
+    }
+
+    TrendReport {
+        rolling_expected_runs,
+        rolling_strikeout_rate,
+        slugging_distribution,
+        hot_streak_period: format!("Games {}-{}", hot_start, hot_start + 10),
+        cold_streak_period: format!("Games {}-{}", cold_start, cold_start + 10),
+        overall_average_runs: ((total_runs / 100.0) * 100.0).round() / 100.0,
+    }
+}
+
+pub fn predict_pitch_selection(
+    pitcher_selection_str: &str,
+    balls: i32,
+    strikes: i32,
+    batter_hand: &str,
+    pitcher_hand: &str,
+    _bases: &[bool; 3],
+    previous_pitches: &[String],
+) -> HashMap<String, f64> {
+    let mut baseline = HashMap::new();
+    for part in pitcher_selection_str.split(',') {
+        let kv: Vec<&str> = part.split(':').collect();
+        if kv.len() == 2 {
+            if let Ok(pct) = kv[1].parse::<f64>() {
+                baseline.insert(kv[0].to_string(), pct);
+            }
+        }
+    }
+    if baseline.is_empty() {
+        baseline.insert("Fastball".to_string(), 1.0);
+    }
+
+    let mut adjusted = baseline.clone();
+
+    let same_handed = batter_hand.to_uppercase() == pitcher_hand.to_uppercase();
+    if same_handed {
+        if adjusted.contains_key("Slider") {
+            *adjusted.get_mut("Slider").unwrap() += 0.15;
+        }
+        if adjusted.contains_key("Sweeper") {
+            *adjusted.get_mut("Sweeper").unwrap() += 0.15;
+        }
+    } else {
+        if adjusted.contains_key("Changeup") {
+            *adjusted.get_mut("Changeup").unwrap() += 0.15;
+        }
+        if adjusted.contains_key("Cutter") {
+            *adjusted.get_mut("Cutter").unwrap() += 0.15;
+        }
+    }
+
+    if strikes == 2 {
+        if adjusted.contains_key("Slider") { *adjusted.get_mut("Slider").unwrap() += 0.10; }
+        if adjusted.contains_key("Curveball") { *adjusted.get_mut("Curveball").unwrap() += 0.10; }
+        if adjusted.contains_key("Changeup") { *adjusted.get_mut("Changeup").unwrap() += 0.05; }
+        if adjusted.contains_key("Fastball") {
+            let val = adjusted.get_mut("Fastball").unwrap();
+            *val = (*val - 0.15).max(0.1);
+        }
+    } else if balls >= 2 || (balls == 1 && strikes == 0) {
+        if adjusted.contains_key("Fastball") {
+            *adjusted.get_mut("Fastball").unwrap() += 0.25;
+        }
+        for (k, v) in adjusted.iter_mut() {
+            if k != "Fastball" {
+                *v = (*v - 0.08).max(0.02);
+            }
+        }
+    }
+
+    if previous_pitches.len() >= 2 && previous_pitches[previous_pitches.len() - 1] == previous_pitches[previous_pitches.len() - 2] {
+        let last_pitch = &previous_pitches[previous_pitches.len() - 1];
+        if adjusted.contains_key(last_pitch) {
+            let val = adjusted.get_mut(last_pitch).unwrap();
+            *val = (*val - 0.20).max(0.05);
+        }
+    }
+
+    let sum: f64 = adjusted.values().sum();
+    for v in adjusted.values_mut() {
+        *v = (*v / sum * 1000.0).round() / 1000.0;
+    }
+
+    adjusted
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ZoneRecommendation {
+    pub zone: String,
+    pub recommendation: String,
+    pub score: f64,
+    pub expected_exit_velocity: f64,
+}
+
+pub fn calculate_swing_zone_optimization(
+    batter_ops: f64,
+    typical_swing_angle: f64,
+    bat_swing_speed: f64,
+    pitcher_velocity: f64,
+    balls: i32,
+    strikes: i32,
+) -> Vec<ZoneRecommendation> {
+    let zones = vec![
+        "High-Inside".to_string(), "High-Middle".to_string(), "High-Outside".to_string(),
+        "Middle-Inside".to_string(), "Middle-Middle".to_string(), "Middle-Outside".to_string(),
+        "Low-Inside".to_string(), "Low-Middle".to_string(), "Low-Outside".to_string()
+    ];
+
+    let mut results = Vec::new();
+    for z in zones {
+        let base_ev = bat_swing_speed * 1.2 + pitcher_velocity * 0.15;
+        
+        let (zone_mod, ev_mod) = match z.as_str() {
+            "Middle-Middle" => (0.95, 5.0),
+            "Middle-Inside" => (0.80, 2.0),
+            "Middle-Outside" => (0.75, 1.0),
+            "High-Middle" => (0.70, 0.0),
+            "Low-Middle" => (0.65, -1.0),
+            "High-Inside" => {
+                if typical_swing_angle > 18.0 { (0.40, -5.0) } else { (0.65, -2.0) }
+            }
+            "Low-Outside" => {
+                if typical_swing_angle < 12.0 { (0.55, -2.0) } else { (0.35, -6.0) }
+            }
+            _ => (0.50, -3.0),
+        };
+
+        let count_bonus = if balls >= 2 && strikes == 0 { 0.15 } else if strikes == 2 { -0.10 } else { 0.0 };
+        let final_score = (batter_ops * zone_mod + count_bonus).clamp(0.1, 0.99);
+        
+        let recommendation = if final_score > 0.75 {
+            "Attack (Green)".to_string()
+        } else if final_score > 0.45 {
+            "Protect (Yellow)".to_string()
+        } else {
+            "Lay off (Red)".to_string()
+        };
+
+        results.push(ZoneRecommendation {
+            zone: z,
+            recommendation,
+            score: (final_score * 100.0).round() / 100.0,
+            expected_exit_velocity: ((base_ev + ev_mod) * 10.0).round() / 10.0,
+        });
+    }
+
+    results
+}
+
+pub fn calculate_at_bat_decision(
+    batter_ops: f64,
+    balls: i32,
+    strikes: i32,
+    inning: i32,
+    score_diff: i32,
+    outs: i32,
+    bases: &[bool; 3],
+    pitch_type: &str,
+    pitch_location: &str,
+) -> (String, f64, f64, String) {
+    let _wp_current = calculate_win_probability("Bottom", inning, outs, bases, score_diff);
+
+    let (p_strike, p_ball) = match pitch_location.to_lowercase().as_str() {
+        "strike" => (0.95, 0.05),
+        "ball" => (0.05, 0.95),
+        _ => (0.50, 0.50),
+    };
+
+    let wp_if_ball = if balls == 3 {
+        let mut new_bases = bases.clone();
+        let mut runs = 0;
+        if !new_bases[0] { new_bases[0] = true; }
+        else if !new_bases[1] { new_bases[1] = true; }
+        else if !new_bases[2] { new_bases[2] = true; }
+        else { runs += 1; }
+        calculate_win_probability("Bottom", inning, outs, &new_bases, score_diff + runs)
+    } else {
+        calculate_win_probability("Bottom", inning, outs, bases, score_diff)
+    };
+
+    let wp_if_strike = if strikes == 2 {
+        let mut new_outs = outs + 1;
+        let mut new_bases = bases.clone();
+        let mut next_inning = inning;
+        let mut next_half = "Bottom";
+        if new_outs >= 3 {
+            new_outs = 0;
+            new_bases = [false; 3];
+            next_half = "Top";
+            next_inning += 1;
+        }
+        calculate_win_probability(next_half, next_inning, new_outs, &new_bases, score_diff)
+    } else {
+        calculate_win_probability("Bottom", inning, outs, bases, score_diff)
+    };
+
+    let expected_wp_take = p_ball * wp_if_ball + p_strike * wp_if_strike;
+
+    let contact_prob = (batter_ops * 0.4).clamp(0.15, 0.45);
+    let hit_prob = contact_prob * 0.7;
+    let out_prob = 1.0 - hit_prob;
+
+    let wp_if_hit = {
+        let mut new_bases = bases.clone();
+        let mut runs = 0;
+        if new_bases[2] { runs += 1; new_bases[2] = false; }
+        if new_bases[1] { new_bases[2] = true; new_bases[1] = false; }
+        if new_bases[0] { new_bases[1] = true; }
+        new_bases[0] = true;
+        calculate_win_probability("Bottom", inning, outs, &new_bases, score_diff + runs)
+    };
+
+    let wp_if_out = {
+        let mut new_outs = outs + 1;
+        let mut new_bases = bases.clone();
+        let mut next_inning = inning;
+        let mut next_half = "Bottom";
+        if new_outs >= 3 {
+            new_outs = 0;
+            new_bases = [false; 3];
+            next_half = "Top";
+            next_inning += 1;
+        }
+        calculate_win_probability(next_half, next_inning, new_outs, &new_bases, score_diff)
+    };
+
+    let expected_wp_swing = hit_prob * wp_if_hit + out_prob * wp_if_out;
+
+    let recommendation = if expected_wp_take > expected_wp_swing + 0.002 {
+        "Take".to_string()
+    } else {
+        "Swing".to_string()
+    };
+
+    let reason = format!(
+        "Count is {}-{}. Pitch is a {} {}. Taking this pitch yields an expected Win Probability of {:.1}%, while swinging profiles to {:.1}% based on contact quality.",
+        balls, strikes, pitch_location, pitch_type, expected_wp_take * 100.0, expected_wp_swing * 100.0
+    );
+
+    (recommendation, expected_wp_take, expected_wp_swing, reason)
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct StealCoordinatorResponse {
+    pub success_probability: f64,
+    pub should_steal: bool,
+    pub run_expectancy_before: f64,
+    pub run_expectancy_after_success: f64,
+    pub run_expectancy_after_fail: f64,
+    pub expected_run_expectancy_change: f64,
+    pub optimal_counts_to_run: Vec<String>,
+}
+
+pub fn calculate_steal_coordinator(
+    sprint_speed: f64,
+    steal_aggression: f64,
+    uses_slide_step: bool,
+    pop_time: f64,
+    base_occupied: i32,
+    outs: i32,
+) -> StealCoordinatorResponse {
+    let lead_delay = 0.50;
+    let aggression_bonus = steal_aggression * 0.15;
+    let t_runner = (90.0 / sprint_speed) + lead_delay - aggression_bonus;
+
+    let t_pitcher = if uses_slide_step { 1.15 } else { 1.30 };
+    let t_defense = t_pitcher + pop_time;
+
+    let margin = t_defense - t_runner;
+    let success_probability = (1.0 / (1.0 + (-5.0 * margin).exp())).clamp(0.01, 0.99);
+
+    let run_expectancy_matrix = [
+        [0.50, 0.90, 1.10, 1.50, 1.40, 1.80, 2.00, 2.30],
+        [0.30, 0.50, 0.70, 1.00, 0.90, 1.20, 1.40, 1.60],
+        [0.10, 0.20, 0.30, 0.40, 0.40, 0.50, 0.60, 0.80],
+    ];
+
+    let out_idx = outs.clamp(0, 2) as usize;
+    
+    let re_before = if base_occupied == 1 {
+        run_expectancy_matrix[out_idx][1]
+    } else {
+        run_expectancy_matrix[out_idx][2]
+    };
+
+    let re_success = if base_occupied == 1 {
+        run_expectancy_matrix[out_idx][2]
+    } else {
+        run_expectancy_matrix[out_idx][3]
+    };
+
+    let re_fail = if outs >= 2 {
+        0.0
+    } else {
+        run_expectancy_matrix[(outs + 1) as usize][0]
+    };
+
+    let expected_re = success_probability * re_success + (1.0 - success_probability) * re_fail;
+    let expected_change = expected_re - re_before;
+
+    let should_steal = expected_change > 0.05 || (success_probability > 0.70);
+
+    let optimal_counts_to_run = vec![
+        "1-1".to_string(),
+        "1-2".to_string(),
+        "2-1".to_string(),
+        "0-1".to_string(),
+    ];
+
+    StealCoordinatorResponse {
+        success_probability: (success_probability * 100.0).round() / 100.0,
+        should_steal,
+        run_expectancy_before: re_before,
+        run_expectancy_after_success: re_success,
+        run_expectancy_after_fail: re_fail,
+        expected_run_expectancy_change: (expected_change * 100.0).round() / 100.0,
+        optimal_counts_to_run,
     }
 }

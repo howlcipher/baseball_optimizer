@@ -282,6 +282,11 @@ pub struct PlayerUpdatePayload {
     pub swing_path_adjustment: Option<String>,
     pub pitcher_composure: Option<String>,
     pub is_tipping_pitches: Option<bool>,
+    pub roster_level: Option<String>,
+    pub salary: Option<f64>,
+    pub glove: Option<String>,
+    pub pants: Option<String>,
+    pub gear: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -432,6 +437,26 @@ pub struct PlayersFilter {
 }
 
 // --- Database helpers ---
+
+fn load_player_with_equipment(player: &mut db::Player) {
+    let mut sprint = player.sprint_speed;
+    let mut framing = player.framing_rating;
+    let mut oaa = player.outs_above_average;
+    let mut fatigue = player.game_progression_fatigue_rate;
+    calculator::apply_equipment_modifiers(
+        &player.glove,
+        &player.pants,
+        &player.gear,
+        &mut sprint,
+        &mut framing,
+        &mut oaa,
+        &mut fatigue,
+    );
+    player.sprint_speed = sprint;
+    player.framing_rating = framing;
+    player.outs_above_average = oaa;
+    player.game_progression_fatigue_rate = fatigue;
+}
 
 async fn get_active_team(pool: &SqlitePool) -> Result<db::Team, StatusCode> {
     let active_team_id: Option<i32> = sqlx::query_scalar(
@@ -694,19 +719,64 @@ async fn swap_context(
         })?;
 
     if roster_count == 0 {
-        let players_data = db::fetch_team_roster_data(&payload.name);
-        // Dynamic insert players in TX
+        let use_pybaseball = std::env::var("USE_PYBASEBALL").unwrap_or_else(|_| "false".to_string()).to_lowercase() == "true";
+        let mut bridge_data: Option<Vec<serde_json::Value>> = None;
+
+        if use_pybaseball {
+            if let Ok(output) = std::process::Command::new("python3").arg("scripts/pybaseball_bridge.py").arg(&payload.name).output() {
+                if output.status.success() {
+                    if let Ok(json_val) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+                        if let Some(arr) = json_val.as_array() {
+                            bridge_data = Some(arr.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        let mock_data = if bridge_data.is_none() { Some(db::fetch_team_roster_data(&payload.name)) } else { None };
         let mut base_id = if payload.team_id == 112 { 500000 } else { payload.team_id * 1000 };
-        for (name, pos, hand) in players_data {
+        let iter_len = bridge_data.as_ref().map(|v| v.len()).unwrap_or_else(|| mock_data.as_ref().unwrap().len());
+
+        for i in 0..iter_len {
             base_id += 1;
             let mut hash_val: u32 = 0;
-            for c in name.chars() {
-                hash_val = hash_val.wrapping_add(c as u32);
+            
+            let (name, pos, hand, obp, slg, ops) = if let Some(ref arr) = bridge_data {
+                let p = &arr[i];
+                let n = p["name"].as_str().unwrap_or("Unknown").to_string();
+                let po = p["position"].as_str().unwrap_or("DH").to_string();
+                let ha = p["batting_handedness"].as_str().unwrap_or("R").to_string();
+                let o = p["base_obp"].as_f64().unwrap_or(0.320);
+                let s = p["base_slg"].as_f64().unwrap_or(0.400);
+                let op = p["base_ops"].as_f64().unwrap_or(o + s);
+                (n, po, ha, o, s, op)
+            } else {
+                let p = &mock_data.as_ref().unwrap()[i];
+                let n = p.0.clone();
+                for c in n.chars() { hash_val = hash_val.wrapping_add(c as u32); }
+                let o = 0.280 + ((hash_val % 100) as f64) * 0.001;
+                let s = 0.350 + ((hash_val % 200) as f64) * 0.001;
+                (n, p.1.clone(), p.2.clone(), o, s, o + s)
+            };
+
+            if hash_val == 0 {
+                for c in name.chars() { hash_val = hash_val.wrapping_add(c as u32); }
             }
-            let obp = 0.280 + ((hash_val % 100) as f64) * 0.001;
-            let slg = 0.350 + ((hash_val % 200) as f64) * 0.001;
-            let ops = obp + slg;
             let phys = db::get_mock_physical_attributes(&name);
+
+            let roster_level_val = if i < 25 {
+                "Active".to_string()
+            } else if i < 40 {
+                "Expanded".to_string()
+            } else {
+                match (i - 40) % 3 {
+                    0 => "AAA".to_string(),
+                    1 => "AA".to_string(),
+                    _ => "A".to_string(),
+                }
+            };
+            let salary_val = 740000.0 + ((hash_val % 15000000) as f64);
 
             sqlx::query(
                 "INSERT INTO players (
@@ -715,9 +785,9 @@ async fn swap_context(
                     runners_on_base_modifier, game_progression_fatigue_rate, at_bat_progression_decay, sprint_speed, steal_aggression,
                     hold_runner_rating, uses_slide_step, pop_time, framing_rating, outs_above_average, pitcher_type, pitcher_arm_angle,
                     pitcher_rubber_position, pitcher_velocity, pitcher_command, pitcher_movement, pitcher_windup_efficiency, pitcher_pitch_selection,
-                    stamina_pct, focus_state, swing_path_adjustment, pitcher_composure, is_tipping_pitches
+                    stamina_pct, focus_state, swing_path_adjustment, pitcher_composure, is_tipping_pitches, roster_level, salary, glove, pants, gear
                 ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, 'Neutral', 'Standard', 'Neutral', 0
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, 'Neutral', 'Standard', 'Neutral', 0, $37, $38, $39, $40, $41
                 )"
             )
             .bind(base_id)
@@ -756,6 +826,11 @@ async fn swap_context(
             .bind(phys["pitcher_windup_efficiency"].as_f64().unwrap_or(0.8))
             .bind(phys["pitcher_pitch_selection"].as_str().unwrap_or("Fastball:0.6,Slider:0.2,Curveball:0.1,Changeup:0.1").to_string())
             .bind(phys["stamina_pct"].as_f64().unwrap_or(1.0))
+            .bind(roster_level_val)
+            .bind(salary_val)
+            .bind("Standard")
+            .bind("Standard")
+            .bind("Standard")
             .execute(&mut *tx)
             .await
             .map_err(|_| {
@@ -904,7 +979,12 @@ async fn get_players(
     };
 
     match players {
-        Ok(list) => Json(list).into_response(),
+        Ok(mut list) => {
+            for p in &mut list {
+                load_player_with_equipment(p);
+            }
+            Json(list).into_response()
+        }
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
@@ -949,13 +1029,19 @@ async fn update_player(
     let swing_path_adjustment = payload.swing_path_adjustment.unwrap_or(p.swing_path_adjustment);
     let pitcher_composure = payload.pitcher_composure.unwrap_or(p.pitcher_composure);
     let is_tipping_pitches = payload.is_tipping_pitches.unwrap_or(p.is_tipping_pitches);
+    let roster_level = payload.roster_level.unwrap_or(p.roster_level);
+    let salary = payload.salary.unwrap_or(p.salary);
+    let glove = payload.glove.unwrap_or(p.glove);
+    let pants = payload.pants.unwrap_or(p.pants);
+    let gear = payload.gear.unwrap_or(p.gear);
 
     let query = "UPDATE players SET 
         name = $1, framing_rating = $2, cumulative_days_played = $3, disrupted_sleep_hours = $4, leverage_anxiety_modifier = $5,
         typical_swing_angle = $6, bat_swing_speed = $7, choke_up = $8, bat_size = $9, bat_weight = $10, stand_in_box = $11,
         sprint_speed = $12, steal_aggression = $13, hold_runner_rating = $14, uses_slide_step = $15, pop_time = $16, stamina_pct = $17,
-        focus_state = $18, swing_path_adjustment = $19, pitcher_composure = $20, is_tipping_pitches = $21
-        WHERE id = $22";
+        focus_state = $18, swing_path_adjustment = $19, pitcher_composure = $20, is_tipping_pitches = $21,
+        roster_level = $22, salary = $23, glove = $24, pants = $25, gear = $26
+        WHERE id = $27";
 
     if let Err(_) = sqlx::query(query)
         .bind(&name)
@@ -979,6 +1065,11 @@ async fn update_player(
         .bind(&swing_path_adjustment)
         .bind(&pitcher_composure)
         .bind(is_tipping_pitches)
+        .bind(&roster_level)
+        .bind(salary)
+        .bind(&glove)
+        .bind(&pants)
+        .bind(&gear)
         .bind(player_id)
         .execute(&state.pool)
         .await
@@ -1024,7 +1115,7 @@ async fn optimize_lineup(
         Err(s) => return s.into_response(),
     };
 
-    let players = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE team_id = $1")
+    let mut players = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE team_id = $1 AND roster_level = 'Active'")
         .bind(team.id)
         .fetch_all(&state.pool)
         .await
@@ -1032,6 +1123,10 @@ async fn optimize_lineup(
         Ok(p) => p,
         Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
+
+    for p in &mut players {
+        load_player_with_equipment(p);
+    }
 
     if players.is_empty() {
         return (StatusCode::BAD_REQUEST, "Roster is empty. Please swap context to reset players.").into_response();
@@ -1517,7 +1612,7 @@ async fn tactical_sub(
         Err(s) => return s.into_response(),
     };
 
-    let active_batter = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1 AND team_id = $2")
+    let mut active_batter = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1 AND team_id = $2")
         .bind(payload.active_batter_id)
         .bind(team.id)
         .fetch_optional(&state.pool)
@@ -1526,6 +1621,7 @@ async fn tactical_sub(
         Ok(Some(p)) => p,
         _ => return (StatusCode::NOT_FOUND, "Active batter not found").into_response(),
     };
+    load_player_with_equipment(&mut active_batter);
 
     let is_high_leverage = payload.inning >= 7 && (payload.run_difference.abs() <= 2);
     let leverage_str = if is_high_leverage { "high" } else { "normal" };
@@ -1671,8 +1767,8 @@ async fn tactical_sub(
     let active_ops_final = active_proj.adjusted_ops;
 
     // Load bench candidates
-    let bench_candidates = match sqlx::query_as::<_, db::Player>(
-        "SELECT * FROM players WHERE team_id = $1 AND id != $2 AND position != 'P'"
+    let mut bench_candidates = match sqlx::query_as::<_, db::Player>(
+        "SELECT * FROM players WHERE team_id = $1 AND id != $2 AND position != 'P' AND roster_level = 'Active'"
     )
     .bind(team.id)
     .bind(active_batter.id)
@@ -1682,6 +1778,10 @@ async fn tactical_sub(
         Ok(c) => c,
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
+
+    for p in &mut bench_candidates {
+        load_player_with_equipment(p);
+    }
 
     let mut best_sub = None;
     let mut best_sub_ops_cold = -1.0;
@@ -1869,7 +1969,7 @@ async fn optimize_bullpen(
         Err(s) => return s.into_response(),
     };
 
-    let opposing_batter = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
+    let mut opposing_batter = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
         .bind(query.batter_id)
         .fetch_optional(&state.pool)
         .await
@@ -1877,10 +1977,11 @@ async fn optimize_bullpen(
         Ok(Some(b)) => b,
         _ => return (StatusCode::NOT_FOUND, "Opposing batter not found").into_response(),
     };
+    load_player_with_equipment(&mut opposing_batter);
 
     // Relievers on our team
-    let relievers = match sqlx::query_as::<_, db::Player>(
-        "SELECT * FROM players WHERE team_id = $1 AND (position LIKE '%RP%' OR position = 'Closer')"
+    let mut relievers = match sqlx::query_as::<_, db::Player>(
+        "SELECT * FROM players WHERE team_id = $1 AND (position LIKE '%RP%' OR position = 'Closer') AND roster_level = 'Active'"
     )
     .bind(team.id)
     .fetch_all(&state.pool)
@@ -1889,6 +1990,10 @@ async fn optimize_bullpen(
         Ok(list) => list,
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
+
+    for r in &mut relievers {
+        load_player_with_equipment(r);
+    }
 
     let mut recommendations = Vec::new();
     for rel in &relievers {
@@ -2007,7 +2112,7 @@ async fn optimize_steal(
     State(state): State<AppState>,
     AxumQuery(query): AxumQuery<StealQuery>,
 ) -> impl IntoResponse {
-    let runner = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
+    let mut runner = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
         .bind(query.runner_id)
         .fetch_optional(&state.pool)
         .await
@@ -2015,15 +2120,17 @@ async fn optimize_steal(
         Ok(Some(r)) => r,
         _ => return (StatusCode::NOT_FOUND, "Runner not found").into_response(),
     };
+    load_player_with_equipment(&mut runner);
 
     let mut pitcher_hold_rating = 0.0;
     let mut uses_slide_step = false;
     if let Some(p_id) = query.pitcher_id {
-        if let Ok(Some(pitcher)) = sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
+        if let Ok(Some(mut pitcher)) = sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
             .bind(p_id)
             .fetch_optional(&state.pool)
             .await
         {
+            load_player_with_equipment(&mut pitcher);
             pitcher_hold_rating = pitcher.hold_runner_rating;
             uses_slide_step = pitcher.uses_slide_step;
         }
@@ -2057,7 +2164,7 @@ async fn optimize_defensive_shift(
     State(state): State<AppState>,
     AxumQuery(query): AxumQuery<DefensiveShiftQuery>,
 ) -> impl IntoResponse {
-    let batter = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
+    let mut batter = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
         .bind(query.batter_id)
         .fetch_optional(&state.pool)
         .await
@@ -2065,6 +2172,7 @@ async fn optimize_defensive_shift(
         Ok(Some(b)) => b,
         _ => return (StatusCode::NOT_FOUND, "Batter not found").into_response(),
     };
+    load_player_with_equipment(&mut batter);
 
     let result = calculator::calculate_defensive_shift_alignment(
         batter.typical_swing_angle,
@@ -2105,7 +2213,7 @@ async fn optimize_series_planner(
         Err(s) => return s.into_response(),
     };
 
-    let players = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE team_id = $1")
+    let mut players = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE team_id = $1 AND roster_level = 'Active'")
         .bind(team.id)
         .fetch_all(&state.pool)
         .await
@@ -2113,6 +2221,10 @@ async fn optimize_series_planner(
         Ok(list) => list,
         _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
+
+    for p in &mut players {
+        load_player_with_equipment(p);
+    }
 
     let mut optimized_series: Vec<OptimizedSeriesGame> = Vec::new();
 
@@ -2303,23 +2415,34 @@ async fn recommend_pitch(
         }
     }
 
-    let pitcher = sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
+    let mut pitcher = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
         .bind(payload.pitcher_id)
         .fetch_optional(&state.pool)
-        .await;
+        .await
+    {
+        Ok(Some(p)) => Some(p),
+        _ => None,
+    };
+    if let Some(ref mut p) = pitcher {
+        load_player_with_equipment(p);
+    }
 
     let catcher = if let Some(c_id) = payload.catcher_id {
-        sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
+        if let Ok(Some(mut c)) = sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
             .bind(c_id)
             .fetch_optional(&state.pool)
             .await
-            .ok()
-            .flatten()
+        {
+            load_player_with_equipment(&mut c);
+            Some(c)
+        } else {
+            None
+        }
     } else {
         None
     };
 
-    let p_stamina = pitcher.ok().flatten().map(|p| p.stamina_pct).unwrap_or(1.0);
+    let p_stamina = pitcher.as_ref().map(|p| p.stamina_pct).unwrap_or(1.0);
     let c_pop = catcher.as_ref().map(|c| c.pop_time).unwrap_or(2.0);
     let mut c_framing = catcher.as_ref().map(|c| c.framing_rating).unwrap_or(0.5);
 
@@ -2389,6 +2512,488 @@ async fn recommend_pitch(
     Json(response).into_response()
 }
 
+// --- GM Mode & Contextual Analytics Features Handlers ---
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RosterTransitionPayload {
+    pub player_id: i32,
+    pub target_level: String,
+}
+
+async fn gm_roster_matrix(State(state): State<AppState>) -> impl IntoResponse {
+    let team = match get_active_team(&state.pool).await {
+        Ok(t) => t,
+        Err(status) => return status.into_response(),
+    };
+
+    let players = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE team_id = $1")
+        .bind(team.id)
+        .fetch_all(&state.pool)
+        .await
+    {
+        Ok(p) => p,
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    let metrics = calculator::calculate_roster_metrics(team.id, &players);
+    Json(metrics).into_response()
+}
+
+async fn gm_roster_transition(
+    State(state): State<AppState>,
+    Json(payload): Json<RosterTransitionPayload>,
+) -> impl IntoResponse {
+    let player = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
+        .bind(payload.player_id)
+        .fetch_optional(&state.pool)
+        .await
+    {
+        Ok(Some(p)) => p,
+        Ok(None) => return (StatusCode::NOT_FOUND, "Player not found").into_response(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    let target = payload.target_level.trim();
+    let target_upper = target.to_uppercase();
+
+    if target_upper == "ACTIVE" {
+        let active_count: i32 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM players WHERE team_id = $1 AND roster_level = 'Active'"
+        )
+        .bind(player.team_id)
+        .fetch_one(&state.pool)
+        .await
+        .unwrap_or(0);
+
+        if active_count >= 25 {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "detail": "Active roster is at the maximum limit of 25 players. You must option/demote another player first."
+                })),
+            )
+                .into_response();
+        }
+    } else if target_upper == "EXPANDED" {
+        let expanded_count: i32 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM players WHERE team_id = $1 AND (roster_level = 'Active' OR roster_level = 'Expanded')"
+        )
+        .bind(player.team_id)
+        .fetch_one(&state.pool)
+        .await
+        .unwrap_or(0);
+
+        if expanded_count >= 40 {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "detail": "Expanded roster is at the maximum limit of 40 players. You must option/demote a player first."
+                })),
+            )
+                .into_response();
+        }
+    }
+
+    if let Err(_) = sqlx::query("UPDATE players SET roster_level = $1 WHERE id = $2")
+        .bind(target)
+        .bind(payload.player_id)
+        .execute(&state.pool)
+        .await
+    {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    let players = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE team_id = $1")
+        .bind(player.team_id)
+        .fetch_all(&state.pool)
+        .await
+    {
+        Ok(p) => p,
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    let metrics = calculator::calculate_roster_metrics(player.team_id, &players);
+    Json(metrics).into_response()
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WpaTrackerPayload {
+    pub half_inning: String,
+    pub inning: i32,
+    pub outs: i32,
+    pub bases: [bool; 3],
+    pub score_differential: i32,
+    pub batter_id: i32,
+    pub pitcher_id: i32,
+}
+
+async fn wpa_tracker(
+    State(_state): State<AppState>,
+    Json(payload): Json<WpaTrackerPayload>,
+) -> impl IntoResponse {
+    let current_wp = calculator::calculate_win_probability(
+        &payload.half_inning,
+        payload.inning,
+        payload.outs,
+        &payload.bases,
+        payload.score_differential,
+    );
+
+    let wpa_outcomes = calculator::calculate_wpa_outcomes(
+        &payload.half_inning,
+        payload.inning,
+        payload.outs,
+        &payload.bases,
+        payload.score_differential,
+    );
+
+    Json(serde_json::json!({
+        "current_win_probability": current_wp,
+        "wpa_outcomes": wpa_outcomes
+    }))
+    .into_response()
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EquipmentOptimizeRequest {
+    pub player_id: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SetEquipmentRequest {
+    pub player_id: i32,
+    pub glove: String,
+    pub pants: String,
+    pub gear: String,
+}
+
+async fn optimize_equipment(
+    State(state): State<AppState>,
+    Json(payload): Json<EquipmentOptimizeRequest>,
+) -> impl IntoResponse {
+    let player = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
+        .bind(payload.player_id)
+        .fetch_optional(&state.pool)
+        .await
+    {
+        Ok(Some(p)) => p,
+        Ok(None) => return (StatusCode::NOT_FOUND, "Player not found").into_response(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    let (glove, pants, gear, sprint_bonus, framing_bonus, oaa_bonus) =
+        calculator::recommend_equipment(&player.position);
+
+    Json(serde_json::json!({
+        "player_id": payload.player_id,
+        "recommended_equipment": {
+            "glove": glove,
+            "pants": pants,
+            "gear": gear
+        },
+        "projected_improvements": {
+            "sprint_speed_bonus": sprint_bonus,
+            "framing_bonus": framing_bonus,
+            "fielding_error_reduction": oaa_bonus
+        }
+    }))
+    .into_response()
+}
+
+async fn set_equipment(
+    State(state): State<AppState>,
+    Json(payload): Json<SetEquipmentRequest>,
+) -> impl IntoResponse {
+    if let Err(_) = sqlx::query("UPDATE players SET glove = $1, pants = $2, gear = $3 WHERE id = $4")
+        .bind(&payload.glove)
+        .bind(&payload.pants)
+        .bind(&payload.gear)
+        .bind(payload.player_id)
+        .execute(&state.pool)
+        .await
+    {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    let updated = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
+        .bind(payload.player_id)
+        .fetch_one(&state.pool)
+        .await
+    {
+        Ok(p) => p,
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    Json(updated).into_response()
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TrendReportRequest {
+    pub team_id: i32,
+}
+
+async fn trend_report(
+    State(state): State<AppState>,
+    Json(payload): Json<TrendReportRequest>,
+) -> impl IntoResponse {
+    let mut players = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE team_id = $1 AND roster_level = 'Active'")
+        .bind(payload.team_id)
+        .fetch_all(&state.pool)
+        .await
+    {
+        Ok(p) => p,
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    if players.is_empty() {
+        return (StatusCode::BAD_REQUEST, "Active roster is empty").into_response();
+    }
+
+    for p in &mut players {
+        load_player_with_equipment(p);
+    }
+
+    players.sort_by(|a, b| b.base_ops.partial_cmp(&a.base_ops).unwrap_or(std::cmp::Ordering::Equal));
+    let active_lineup = &players[0..9.min(players.len())];
+
+    let mc_inputs: Vec<calculator::MonteCarloPlayerInput> = active_lineup
+        .iter()
+        .map(|p| calculator::MonteCarloPlayerInput {
+            player_id: p.id,
+            name: p.name.clone(),
+            adjusted_obp: p.base_obp,
+            adjusted_slg: p.base_slg,
+        })
+        .collect();
+
+    let report = calculator::simulate_season_trends(&mc_inputs);
+    Json(report).into_response()
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PitchPredictionRequest {
+    pub pitcher_id: i32,
+    pub batter_id: i32,
+    pub balls: i32,
+    pub strikes: i32,
+    pub outs: i32,
+    pub bases: [bool; 3],
+    pub previous_pitches: Vec<String>,
+}
+
+async fn pitch_prediction(
+    State(state): State<AppState>,
+    Json(payload): Json<PitchPredictionRequest>,
+) -> impl IntoResponse {
+    let pitcher = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
+        .bind(payload.pitcher_id)
+        .fetch_optional(&state.pool)
+        .await
+    {
+        Ok(Some(p)) => p,
+        Ok(None) => return (StatusCode::NOT_FOUND, "Pitcher not found").into_response(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    let batter = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
+        .bind(payload.batter_id)
+        .fetch_optional(&state.pool)
+        .await
+    {
+        Ok(Some(p)) => p,
+        Ok(None) => return (StatusCode::NOT_FOUND, "Batter not found").into_response(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    let probabilities = calculator::predict_pitch_selection(
+        &pitcher.pitcher_pitch_selection,
+        payload.balls,
+        payload.strikes,
+        &batter.batting_handedness,
+        &pitcher.batting_handedness,
+        &payload.bases,
+        &payload.previous_pitches,
+    );
+
+    let most_likely = probabilities.iter()
+        .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+        .map(|(k, _)| k.clone())
+        .unwrap_or_else(|| "Fastball".to_string());
+
+    Json(serde_json::json!({
+        "pitch_probabilities": probabilities,
+        "most_likely_pitch": most_likely,
+        "situational_reasoning": format!("Given count is {}-{}, same-handedness status: {}, next pitch prediction profiles toward {}.", payload.balls, payload.strikes, batter.batting_handedness == pitcher.batting_handedness, most_likely)
+    }))
+    .into_response()
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SwingZoneRequest {
+    pub batter_id: i32,
+    pub pitcher_id: i32,
+    pub balls: i32,
+    pub strikes: i32,
+}
+
+async fn swing_zone_optimization(
+    State(state): State<AppState>,
+    Json(payload): Json<SwingZoneRequest>,
+) -> impl IntoResponse {
+    let mut batter = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
+        .bind(payload.batter_id)
+        .fetch_optional(&state.pool)
+        .await
+    {
+        Ok(Some(p)) => p,
+        Ok(None) => return (StatusCode::NOT_FOUND, "Batter not found").into_response(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    let mut pitcher = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
+        .bind(payload.pitcher_id)
+        .fetch_optional(&state.pool)
+        .await
+    {
+        Ok(Some(p)) => p,
+        Ok(None) => return (StatusCode::NOT_FOUND, "Pitcher not found").into_response(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    load_player_with_equipment(&mut batter);
+    load_player_with_equipment(&mut pitcher);
+
+    let zones = calculator::calculate_swing_zone_optimization(
+        batter.base_ops,
+        batter.typical_swing_angle,
+        batter.bat_swing_speed,
+        pitcher.pitcher_velocity,
+        payload.balls,
+        payload.strikes,
+    );
+
+    Json(serde_json::json!({
+        "zones": zones,
+        "overall_guidance": format!("With count {}-{}, batter should prioritize middle-in exit velocity zones.", payload.balls, payload.strikes)
+    }))
+    .into_response()
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AtBatDecisionRequest {
+    pub batter_id: i32,
+    pub pitcher_id: i32,
+    pub balls: i32,
+    pub strikes: i32,
+    pub inning: i32,
+    pub score_differential: i32,
+    pub outs: i32,
+    pub bases: [bool; 3],
+    pub pitch_type: String,
+    pub pitch_location: String,
+}
+
+async fn take_swing_decision(
+    State(state): State<AppState>,
+    Json(payload): Json<AtBatDecisionRequest>,
+) -> impl IntoResponse {
+    let mut batter = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
+        .bind(payload.batter_id)
+        .fetch_optional(&state.pool)
+        .await
+    {
+        Ok(Some(p)) => p,
+        Ok(None) => return (StatusCode::NOT_FOUND, "Batter not found").into_response(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    load_player_with_equipment(&mut batter);
+
+    let (_recommendation, expected_wp_take, expected_wp_swing, reason) =
+        calculator::calculate_at_bat_decision(
+            batter.base_ops,
+            payload.balls,
+            payload.strikes,
+            payload.inning,
+            payload.score_differential,
+            payload.outs,
+            &payload.bases,
+            &payload.pitch_type,
+            &payload.pitch_location,
+        );
+
+    Json(serde_json::json!({
+        "recommendation": _recommendation,
+        "expected_wp_take": (expected_wp_take * 1000.0).round() / 1000.0,
+        "expected_wp_swing": (expected_wp_swing * 1000.0).round() / 1000.0,
+        "reason": reason
+    }))
+    .into_response()
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct StealCoordinatorRequest {
+    pub runner_id: i32,
+    pub pitcher_id: i32,
+    pub catcher_id: Option<i32>,
+    pub base_occupied: i32,
+    pub outs: i32,
+}
+
+async fn steal_coordinator(
+    State(state): State<AppState>,
+    Json(payload): Json<StealCoordinatorRequest>,
+) -> impl IntoResponse {
+    let mut runner = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
+        .bind(payload.runner_id)
+        .fetch_optional(&state.pool)
+        .await
+    {
+        Ok(Some(p)) => p,
+        Ok(None) => return (StatusCode::NOT_FOUND, "Runner not found").into_response(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    let mut pitcher = match sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
+        .bind(payload.pitcher_id)
+        .fetch_optional(&state.pool)
+        .await
+    {
+        Ok(Some(p)) => p,
+        Ok(None) => return (StatusCode::NOT_FOUND, "Pitcher not found").into_response(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    load_player_with_equipment(&mut runner);
+    load_player_with_equipment(&mut pitcher);
+
+    let pop_time = if let Some(c_id) = payload.catcher_id {
+        if let Ok(Some(mut catcher)) = sqlx::query_as::<_, db::Player>("SELECT * FROM players WHERE id = $1")
+            .bind(c_id)
+            .fetch_optional(&state.pool)
+            .await
+        {
+            load_player_with_equipment(&mut catcher);
+            catcher.pop_time
+        } else {
+            2.0
+        }
+      } else {
+          2.0
+      };
+
+    let response = calculator::calculate_steal_coordinator(
+        runner.sprint_speed,
+        runner.steal_aggression,
+        pitcher.uses_slide_step,
+        pop_time,
+        payload.base_occupied,
+        payload.outs,
+    );
+
+    Json(response).into_response()
+}
+
 // --- Main Application ---
 
 #[tokio::main]
@@ -2436,6 +3041,16 @@ async fn main() {
         .route("/api/v1/optimize/defensive-shift", post(optimize_defensive_shift))
         .route("/api/v1/optimize/series-planner", post(optimize_series_planner))
         .route("/api/v1/optimize/pitch-caller", post(recommend_pitch))
+        .route("/api/v1/gm/roster-matrix", get(gm_roster_matrix))
+        .route("/api/v1/gm/roster-transition", post(gm_roster_transition))
+        .route("/api/v1/analytics/wpa-tracker", post(wpa_tracker))
+        .route("/api/v1/optimize/equipment", post(optimize_equipment))
+        .route("/api/v1/optimize/set-equipment", post(set_equipment))
+        .route("/api/v1/analytics/trend-report", post(trend_report))
+        .route("/api/v1/optimize/pitch-prediction", post(pitch_prediction))
+        .route("/api/v1/optimize/swing-zone", post(swing_zone_optimization))
+        .route("/api/v1/optimize/take-swing-decision", post(take_swing_decision))
+        .route("/api/v1/optimize/steal-coordinator", post(steal_coordinator))
         .with_state(state)
         // Serve static directory for front-end
         .fallback_service(ServeDir::new("static").fallback(tower_http::services::ServeFile::new("static/index.html")))

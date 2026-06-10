@@ -27,16 +27,25 @@ FROM debian:bookworm-slim
 
 WORKDIR /app
 
-# Install curl for healthcheck
+# Install curl, python3, and pip for pybaseball bridge
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    python3 \
+    python3-pip \
+    python3-venv \
     && rm -rf /var/lib/apt/lists/*
+
+# Set up Python virtual environment and install pybaseball
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir pybaseball
 
 # Copy binary from builder
 COPY --from=builder /usr/src/app/target/release/baseball_optimizer /usr/local/bin/baseball_optimizer
 
 # Copy static assets and configurations
 COPY static/ ./static/
+COPY scripts/ ./scripts/
 COPY app_config.json ./
 COPY legacy/app/models/predictive_ops.json ./legacy/app/models/predictive_ops.json
 

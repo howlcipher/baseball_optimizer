@@ -79,6 +79,11 @@ pub struct Player {
     pub swing_path_adjustment: String,
     pub pitcher_composure: String,
     pub is_tipping_pitches: bool,
+    pub roster_level: String,
+    pub salary: f64,
+    pub glove: String,
+    pub pants: String,
+    pub gear: String,
 }
 
 pub async fn init_db(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
@@ -192,7 +197,12 @@ pub async fn init_db(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
             focus_state TEXT NOT NULL DEFAULT 'Neutral',
             swing_path_adjustment TEXT NOT NULL DEFAULT 'Standard',
             pitcher_composure TEXT NOT NULL DEFAULT 'Neutral',
-            is_tipping_pitches BOOLEAN NOT NULL DEFAULT 0
+            is_tipping_pitches BOOLEAN NOT NULL DEFAULT 0,
+            roster_level TEXT NOT NULL DEFAULT 'Active',
+            salary REAL NOT NULL DEFAULT 740000.0,
+            glove TEXT NOT NULL DEFAULT 'Standard',
+            pants TEXT NOT NULL DEFAULT 'Standard',
+            gear TEXT NOT NULL DEFAULT 'Standard'
         );"
     ).execute(&pool).await?;
 
@@ -319,7 +329,7 @@ pub async fn seed_database(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 
     // Cubs Roster
     let cubs_players = fetch_team_roster_data("Chicago Cubs");
-    insert_roster(pool, 112, cubs_players).await?;
+    insert_roster(pool, 112, "Chicago Cubs", cubs_players).await?;
 
     // 2. Red Sox Team
     sqlx::query(
@@ -339,7 +349,7 @@ pub async fn seed_database(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 
     // Red Sox Roster
     let redsox_players = fetch_team_roster_data("Boston Red Sox");
-    insert_roster(pool, 111, redsox_players).await?;
+    insert_roster(pool, 111, "Boston Red Sox", redsox_players).await?;
 
     // Active team state initially Cubs
     sqlx::query(
@@ -349,22 +359,67 @@ pub async fn seed_database(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-pub async fn insert_roster(pool: &SqlitePool, team_id: i32, players: Vec<(String, String, String)>) -> Result<(), sqlx::Error> {
+pub async fn insert_roster(pool: &SqlitePool, team_id: i32, team_name: &str, default_players: Vec<(String, String, String)>) -> Result<(), sqlx::Error> {
     let mut base_id = if team_id == 112 { 500000 } else { team_id * 1000 };
-    for (name, pos, hand) in players {
+    
+    let use_pybaseball = std::env::var("USE_PYBASEBALL").unwrap_or_else(|_| "false".to_string()).to_lowercase() == "true";
+    let mut bridge_data: Option<Vec<serde_json::Value>> = None;
+
+    if use_pybaseball {
+        if let Ok(output) = std::process::Command::new("python3").arg("scripts/pybaseball_bridge.py").arg(team_name).output() {
+            if output.status.success() {
+                if let Ok(json_val) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+                    if let Some(arr) = json_val.as_array() {
+                        bridge_data = Some(arr.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    let iter_len = bridge_data.as_ref().map(|v| v.len()).unwrap_or(default_players.len());
+
+    for i in 0..iter_len {
         base_id += 1;
         
-        // Determinstic stats based on name hash
         let mut hash_val: u32 = 0;
-        for c in name.chars() {
-            hash_val = hash_val.wrapping_add(c as u32);
+        let (name, pos, hand, obp, slg, ops) = if let Some(ref arr) = bridge_data {
+            let p = &arr[i];
+            let n = p["name"].as_str().unwrap_or("Unknown").to_string();
+            let po = p["position"].as_str().unwrap_or("DH").to_string();
+            let ha = p["batting_handedness"].as_str().unwrap_or("R").to_string();
+            let o = p["base_obp"].as_f64().unwrap_or(0.320);
+            let s = p["base_slg"].as_f64().unwrap_or(0.400);
+            let op = p["base_ops"].as_f64().unwrap_or(o + s);
+            (n, po, ha, o, s, op)
+        } else {
+            let p = &default_players[i];
+            let n = p.0.clone();
+            for c in n.chars() { hash_val = hash_val.wrapping_add(c as u32); }
+            let o = 0.280 + ((hash_val % 100) as f64) * 0.001;
+            let s = 0.350 + ((hash_val % 200) as f64) * 0.001;
+            (n, p.1.clone(), p.2.clone(), o, s, o + s)
+        };
+
+        if hash_val == 0 {
+            for c in name.chars() { hash_val = hash_val.wrapping_add(c as u32); }
         }
-        let obp = 0.280 + ((hash_val % 100) as f64) * 0.001;
-        let slg = 0.350 + ((hash_val % 200) as f64) * 0.001;
-        let ops = obp + slg;
         
         let phys = get_mock_physical_attributes(&name);
         
+        let roster_level_val = if i < 25 {
+            "Active".to_string()
+        } else if i < 40 {
+            "Expanded".to_string()
+        } else {
+            match (i - 40) % 3 {
+                0 => "AAA".to_string(),
+                1 => "AA".to_string(),
+                _ => "A".to_string(),
+            }
+        };
+        let salary_val = 740000.0 + ((hash_val % 15000000) as f64);
+
         // Insert player
         sqlx::query(
             "INSERT INTO players (
@@ -373,9 +428,9 @@ pub async fn insert_roster(pool: &SqlitePool, team_id: i32, players: Vec<(String
                 runners_on_base_modifier, game_progression_fatigue_rate, at_bat_progression_decay, sprint_speed, steal_aggression,
                 hold_runner_rating, uses_slide_step, pop_time, framing_rating, outs_above_average, pitcher_type, pitcher_arm_angle,
                 pitcher_rubber_position, pitcher_velocity, pitcher_command, pitcher_movement, pitcher_windup_efficiency, pitcher_pitch_selection,
-                stamina_pct, focus_state, swing_path_adjustment, pitcher_composure, is_tipping_pitches
+                stamina_pct, focus_state, swing_path_adjustment, pitcher_composure, is_tipping_pitches, roster_level, salary, glove, pants, gear
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, 'Neutral', 'Standard', 'Neutral', 0
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, 'Neutral', 'Standard', 'Neutral', 0, $37, $38, $39, $40, $41
             )"
         )
         .bind(base_id)
@@ -414,6 +469,11 @@ pub async fn insert_roster(pool: &SqlitePool, team_id: i32, players: Vec<(String
         .bind(phys["pitcher_windup_efficiency"].as_f64().unwrap_or(0.8))
         .bind(phys["pitcher_pitch_selection"].as_str().unwrap_or("Fastball:0.6,Slider:0.2,Curveball:0.1,Changeup:0.1").to_string())
         .bind(phys["stamina_pct"].as_f64().unwrap_or(1.0))
+        .bind(roster_level_val)
+        .bind(salary_val)
+        .bind("Standard")
+        .bind("Standard")
+        .bind("Standard")
         .execute(pool)
         .await?;
     }

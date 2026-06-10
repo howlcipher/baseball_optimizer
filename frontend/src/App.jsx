@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { QueryClient, QueryClientProvider, useQuery, useMutation } from '@tanstack/react-query';
 import { ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import AppTooltip from './components/Tooltip';
+import UserGuide from './components/UserGuide';
+import MetricCreator from './components/MetricCreator';
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -1539,31 +1542,41 @@ export function App() {
                         <form onSubmit={handlePhilosophyUpdate}>
                             <div className="config-grid">
                                 <div className="input-group">
-                                    <label>Fatigue Threshold</label>
+                                    <AppTooltip text="Number of consecutive days played before a player suffers performance degradation">
+                                        <label>Fatigue Threshold</label>
+                                    </AppTooltip>
                                     <input type="number" min="1" max="15" value={fatigueThreshold} onChange={(e) => setFatigueThreshold(e.target.value)} required />
                                 </div>
                                 <div className="input-group">
-                                    <label>Clutch Weight</label>
+                                    <AppTooltip text="Multiplier applied to a player's leverage anxiety modifier during late-game situations">
+                                        <label>Clutch Weight</label>
+                                    </AppTooltip>
                                     <input type="number" step="0.1" min="0.1" max="5.0" value={clutchWeight} onChange={(e) => setClutchWeight(e.target.value)} required />
                                 </div>
                                 <div className="input-group">
-                                    <label>Def Sub Inning</label>
+                                    <AppTooltip text="The inning at which defensive replacements (focusing on OAA and framing) are prioritized over batting strength">
+                                        <label>Def Sub Inning</label>
+                                    </AppTooltip>
                                     <input type="number" min="1" max="9" value={defInning} onChange={(e) => setDefInning(e.target.value)} required />
                                 </div>
                                 <div className="input-group">
-                                    <label>Cold Bench Penalty</label>
+                                    <AppTooltip text="A performance tax applied to players coming off the bench cold (pinch-hitters/relievers)">
+                                        <label>Cold Bench Penalty</label>
+                                    </AppTooltip>
                                     <input type="number" step="0.01" min="0.0" max="0.5" value={coldFriction} onChange={(e) => setColdFriction(e.target.value)} required />
                                 </div>
                                 <div className="input-group full-width" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                    <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', userSelect: 'none' }}>
-                                        <input 
-                                            type="checkbox" 
-                                            checked={enableObservations} 
-                                            onChange={(e) => setEnableObservations(e.target.checked)} 
-                                            style={{ width: 'auto', cursor: 'pointer' }} 
-                                        /> 
-                                        Enable Scout Feel Observations
-                                    </label>
+                                    <AppTooltip text="Toggles qualitative attributes like 'Pitcher Composure' and 'Swing Path Adjustment' in optimization calculations">
+                                        <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', userSelect: 'none' }}>
+                                            <input 
+                                                type="checkbox" 
+                                                checked={enableObservations} 
+                                                onChange={(e) => setEnableObservations(e.target.checked)} 
+                                                style={{ width: 'auto', cursor: 'pointer' }} 
+                                            /> 
+                                            Enable Scout Feel Observations
+                                        </label>
+                                    </AppTooltip>
                                 </div>
                             </div>
                             <button type="submit" className="btn">Save Override Policy</button>
@@ -2471,6 +2484,10 @@ export function App() {
 
                 </div>
 
+                <div style={{ gridColumn: '1 / -1' }}>
+                    <MetricCreator players={ourPlayers} />
+                </div>
+
                 {/* ROSTER MANAGER & SANDBOX EDITOR */}
                 <div className="glass-card" style={{ marginTop: '1.5rem', gridColumn: '1 / -1' }}>
                     <div className="card-header" style={{ marginBottom: '1rem' }}>
@@ -2643,8 +2660,8 @@ export function App() {
                         </div>
                     </div>
                 </div>
-
             </div>
+            <UserGuide />
         </div>
     );
 }

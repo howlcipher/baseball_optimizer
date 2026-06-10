@@ -1,5 +1,5 @@
 # Stage 1: Build the Rust binary
-FROM rust:1.75-slim AS builder
+FROM rust:1.85-slim AS builder
 
 WORKDIR /usr/src/app
 
@@ -37,6 +37,7 @@ COPY --from=builder /usr/src/app/target/release/baseball_optimizer /usr/local/bi
 # Copy static assets and configurations
 COPY static/ ./static/
 COPY app_config.json ./
+COPY legacy/app/models/predictive_ops.json ./legacy/app/models/predictive_ops.json
 
 EXPOSE 8080
 

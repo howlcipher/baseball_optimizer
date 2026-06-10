@@ -82,7 +82,10 @@ pub struct Player {
 }
 
 pub async fn init_db(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
-    let raw_path = if database_url.starts_with("sqlite:///") {
+    let raw_path = if database_url.starts_with("postgres") {
+        tracing::warn!("PostgreSQL database URL detected: {}. Rust backend is SQLite-only. Falling back to SQLite file: baseball_optimizer.db", database_url);
+        "baseball_optimizer.db".to_string()
+    } else if database_url.starts_with("sqlite:///") {
         let remainder = &database_url[10..];
         let is_absolute = remainder.starts_with('/') 
             || remainder.starts_with("run/") 

@@ -200,11 +200,11 @@ Ensure you have the following installed on your system:
 ## 6. Running the Application
 
 ### 1. One-Click Startup (Recommended)
-For an automated setup that checks dependencies, compiles the React frontend (if missing), and launches the Rust server in release mode, run:
+For an automated setup that checks dependencies, terminates any existing instances running on port 8080, compiles the React frontend (if missing), and launches the Rust server in release mode, run:
 ```bash
 ./start.sh
 ```
-*Note: If you run this script by double-clicking it from your desktop's file manager, it will automatically launch a terminal window to show progress logs and automatically open your default browser to `http://127.0.0.1:8080` once the server has booted.*
+*Note: If you run this script by double-clicking it from your desktop's file manager, it will automatically launch a terminal window to show progress logs and automatically open your default browser to `http://127.0.0.1:8080` once the server has booted. It also terminates any previously running backend servers to prevent port conflicts.*
 
 ### 2. Standalone/Production Server
 After building the release binary manually, run the server:

@@ -77,9 +77,11 @@ Implement boundary verification suites:
 ## Step 8: Automated Launcher Script (`start.sh`)
 Create an entry point shell script to unify compile checks and startup orchestration:
 - Detect if executed from a graphical interface (double-clicked) and automatically spawn a terminal window (like `gnome-terminal`, `xterm`, etc.) to show progress logs.
+- Scan for and terminate any existing backend instances (or other processes occupying port 8080) using `lsof` and `pkill` to avoid binding collisions.
 - Automatically check for node/npm availability if the `static/` directory does not contain `index.html`.
 - Run frontend builds dynamically to prepare embedded resources.
 - Run a background thread to launch the default web browser (using `xdg-open` or `open`) to `http://127.0.0.1:8080` after the server starts.
 - Execute `cargo run --release` to run the compiled high-performance Axum application.
+
 
 

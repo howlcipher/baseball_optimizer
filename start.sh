@@ -32,6 +32,18 @@ if [ "$1" = "--terminal" ]; then
     shift
 fi
 
+# Clean up any existing instances running on port 8080 or process name baseball_optimizer
+echo "Checking for existing instances of the application..."
+if command -v lsof &> /dev/null; then
+    PORT_PIDS=$(lsof -t -i:8080)
+    if [ ! -z "$PORT_PIDS" ]; then
+        echo "Port 8080 is currently occupied by PID(s): $PORT_PIDS. Terminating them..."
+        kill -9 $PORT_PIDS 2>/dev/null || true
+        sleep 0.5
+    fi
+fi
+pkill -x baseball_optimizer 2>/dev/null || true
+
 echo "=================================================="
 echo "⚾ Baseball Optimizer One-Click Launcher ⚾"
 echo "=================================================="

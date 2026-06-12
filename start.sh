@@ -79,6 +79,25 @@ fi
     fi
 ) &
 
-# 4. Launch the Rust backend server
+# 4. Launch the Rust backend server in the background
 echo "Launching Rust Axum backend server..."
-cargo run --release
+cargo run --release &
+SERVER_PID=$!
+
+# Clean up background process on script exit
+trap 'kill $SERVER_PID 2>/dev/null || true' EXIT INT TERM
+
+echo ""
+echo "=================================================="
+echo "🚀 Server is running on http://127.0.0.1:8080"
+echo "👉 Press [ENTER] at any time to stop the server."
+echo "=================================================="
+echo ""
+
+# Wait for user keypress
+read -r
+
+echo "Stopping server (PID $SERVER_PID)..."
+kill $SERVER_PID 2>/dev/null || true
+wait $SERVER_PID 2>/dev/null || true
+echo "Server stopped successfully."

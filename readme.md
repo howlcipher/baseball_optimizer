@@ -81,6 +81,17 @@ An interactive single-page application is hosted at the root path `/` and suppor
 - **Pitch Tunneling & Sequence Simulator**: Timeline tracking of the current at-bat pitch history combined with next pitch optimal recommendations based on tunneling physics and catcher framing metrics.
 - **Live ML Feature Importance Explainer**: Local and global machine learning model feature importance explainer, displaying feature impact (swing angle, speed, bat weight, sprint speed) on player-specific adjusted OBP/SLG/OPS.
 
+### Visual Preview
+Here is a look at the interactive dugout management dashboard:
+
+#### Dashboard Screenshot
+![Baseball Optimizer Dashboard Screenshot](screenshots/Screenshot_20260612_151400.png)
+
+#### Walkthrough Screencast
+<video src="screenshots/Screencast_20260612_151126.webm" width="100%" poster="screenshots/Screenshot_20260612_151400.png" controls>
+  Your browser does not support the video tag. Download the video <a href="screenshots/Screencast_20260612_151126.webm">here</a>.
+</video>
+
 ### Advanced Strategic Modulators (Togglable Settings)
 Managers and GMs can toggle these advanced modulators in the App Configuration settings panel:
 - **Dynamic Pitch-Mix Matchup Model**: Weights OBP/SLG baselines against the pitcher's detailed arsenal (percentages, velocity, spin, break) rather than simple platoon splits.

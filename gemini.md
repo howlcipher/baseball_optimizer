@@ -81,7 +81,7 @@ Create an entry point shell script to unify compile checks and startup orchestra
 - Automatically check for node/npm availability if the `static/` directory does not contain `index.html`.
 - Run frontend builds dynamically to prepare embedded resources.
 - Run a background thread to launch the default web browser (using `xdg-open` or `open`) to `http://127.0.0.1:8080` after the server starts.
-- Execute `cargo run --release` to run the compiled high-performance Axum application.
+- Execute `cargo run --release` in the background. Register a cleanup trap to kill the server process on interrupt or exit, and wait using `read -r` for an Enter key press in the terminal to cleanly terminate the server.
 
 
 

@@ -6,15 +6,43 @@ set -e
 BASE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$BASE_DIR"
 
+# 1. Relaunch in a terminal emulator if run from a GUI double-click
+if [ "$1" != "--terminal" ] && { [ ! -t 0 ] || [ ! -t 1 ]; }; then
+    for term in x-terminal-emulator gnome-terminal konsole xfce4-terminal mate-terminal kitty alacritty xterm; do
+        if command -v "$term" &> /dev/null; then
+            case "$term" in
+                gnome-terminal|xfce4-terminal|mate-terminal)
+                    exec "$term" -- "$0" --terminal "$@"
+                    ;;
+                konsole)
+                    exec "$term" -e "$0" --terminal "$@"
+                    ;;
+                *)
+                    exec "$term" -e "$0" --terminal "$@"
+                    ;;
+            esac
+            exit 0
+        fi
+    done
+    echo "Warning: Running in a graphical environment but no terminal emulator was found. Output will not be visible."
+fi
+
+# Consume the --terminal flag if present
+if [ "$1" = "--terminal" ]; then
+    shift
+fi
+
 echo "=================================================="
 echo "⚾ Baseball Optimizer One-Click Launcher ⚾"
 echo "=================================================="
 
-# 1. Check if Node / NPM is available for building the frontend if needed
+# 2. Check if Node / NPM is available for building the frontend if needed
 if [ ! -f "static/index.html" ]; then
     echo "Frontend build missing. Checking prerequisites..."
     if ! command -v npm &> /dev/null; then
         echo "ERROR: npm/node is required to build the frontend but was not found in PATH."
+        echo "Please run this in a terminal or install Node.js."
+        read -p "Press Enter to exit..."
         exit 1
     fi
     echo "Compiling Vite React frontend..."
@@ -28,6 +56,17 @@ else
     echo "Tip: Run 'make release' to force a complete rebuild of frontend and backend."
 fi
 
-# 2. Launch the Rust backend server
+# 3. Schedule automatic browser open
+(
+    sleep 3
+    echo "Automatically opening browser..."
+    if command -v xdg-open &> /dev/null; then
+        xdg-open "http://127.0.0.1:8080" &> /dev/null &
+    elif command -v open &> /dev/null; then
+        open "http://127.0.0.1:8080" &> /dev/null &
+    fi
+) &
+
+# 4. Launch the Rust backend server
 echo "Launching Rust Axum backend server..."
 cargo run --release

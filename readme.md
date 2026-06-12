@@ -204,6 +204,7 @@ For an automated setup that checks dependencies, compiles the React frontend (if
 ```bash
 ./start.sh
 ```
+*Note: If you run this script by double-clicking it from your desktop's file manager, it will automatically launch a terminal window to show progress logs and automatically open your default browser to `http://127.0.0.1:8080` once the server has booted.*
 
 ### 2. Standalone/Production Server
 After building the release binary manually, run the server:

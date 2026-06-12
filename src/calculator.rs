@@ -33,12 +33,10 @@ pub static RANDOM_FOREST: OnceLock<Vec<DecisionTree>> = OnceLock::new();
 
 pub fn load_random_forest() -> &'static Vec<DecisionTree> {
     RANDOM_FOREST.get_or_init(|| {
-        let path = std::path::Path::new("legacy/app/models/predictive_ops.json");
-        if path.exists()
-            && let Ok(content) = std::fs::read_to_string(path)
-                && let Ok(forest) = serde_json::from_str::<Vec<DecisionTree>>(&content) {
-                    return forest;
-                }
+        let content = include_str!("../legacy/app/models/predictive_ops.json");
+        if let Ok(forest) = serde_json::from_str::<Vec<DecisionTree>>(content) {
+            return forest;
+        }
         Vec::new()
     })
 }

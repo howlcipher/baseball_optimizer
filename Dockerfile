@@ -18,7 +18,9 @@ RUN mkdir src && echo "fn main() {}" > src/main.rs
 RUN cargo build --release
 RUN rm -rf src/ target/release/deps/baseball_optimizer*
 
-# Copy actual source files
+# Copy actual source files, static assets, and models for compilation
+COPY static/ ./static/
+COPY legacy/ ./legacy/
 COPY src/ ./src/
 RUN cargo build --release
 
@@ -43,11 +45,9 @@ RUN pip install --no-cache-dir pybaseball
 # Copy binary from builder
 COPY --from=builder /usr/src/app/target/release/baseball_optimizer /usr/local/bin/baseball_optimizer
 
-# Copy static assets and configurations
-COPY static/ ./static/
+# Copy scripts and configurations
 COPY scripts/ ./scripts/
 COPY app_config.json ./
-COPY legacy/app/models/predictive_ops.json ./legacy/app/models/predictive_ops.json
 
 EXPOSE 8080
 

@@ -12,7 +12,6 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqlitePool;
 use tower_http::cors::CorsLayer;
-use tower_http::services::ServeDir;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Clone)]
@@ -2987,6 +2986,47 @@ async fn steal_coordinator(
     Json(response).into_response()
 }
 
+// --- Embedded Static Assets ---
+
+#[derive(rust_embed::RustEmbed)]
+#[folder = "static/"]
+struct Asset;
+
+async fn static_handler(uri: axum::http::Uri) -> impl axum::response::IntoResponse {
+    let mut path = uri.path().trim_start_matches('/').to_string();
+
+    if path.is_empty() {
+        path = "index.html".to_string();
+    }
+
+    match Asset::get(&path) {
+        Some(content) => {
+            let mime = mime_guess::from_path(&path).first_or_octet_stream();
+            axum::response::Response::builder()
+                .header(axum::http::header::CONTENT_TYPE, axum::http::HeaderValue::from_str(mime.as_ref()).unwrap())
+                .body(axum::body::Body::from(content.data))
+                .unwrap()
+        }
+        None => {
+            // Fallback to index.html (useful for React/Vite client-side routing)
+            match Asset::get("index.html") {
+                Some(content) => {
+                    axum::response::Response::builder()
+                        .header(axum::http::header::CONTENT_TYPE, "text/html")
+                        .body(axum::body::Body::from(content.data))
+                        .unwrap()
+                }
+                None => {
+                    axum::response::Response::builder()
+                        .status(axum::http::StatusCode::NOT_FOUND)
+                        .body(axum::body::Body::from("404 Not Found"))
+                        .unwrap()
+                }
+            }
+        }
+    }
+}
+
 // --- Main Application ---
 
 #[tokio::main]
@@ -3045,8 +3085,8 @@ async fn main() {
         .route("/api/v1/optimize/take-swing-decision", post(take_swing_decision))
         .route("/api/v1/optimize/steal-coordinator", post(steal_coordinator))
         .with_state(state)
-        // Serve static directory for front-end
-        .fallback_service(ServeDir::new("static").fallback(tower_http::services::ServeFile::new("static/index.html")))
+        // Serve embedded front-end static files
+        .fallback(static_handler)
         .layer(CorsLayer::permissive());
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:8080").await.unwrap();

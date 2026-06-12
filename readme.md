@@ -199,8 +199,14 @@ Ensure you have the following installed on your system:
 
 ## 6. Running the Application
 
-### 1. Standalone/Production Server
-After building the release binary, run the server:
+### 1. One-Click Startup (Recommended)
+For an automated setup that checks dependencies, compiles the React frontend (if missing), and launches the Rust server in release mode, run:
+```bash
+./start.sh
+```
+
+### 2. Standalone/Production Server
+After building the release binary manually, run the server:
 ```bash
 ./target/release/baseball_optimizer
 ```

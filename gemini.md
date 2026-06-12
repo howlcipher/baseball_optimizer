@@ -73,3 +73,10 @@ Implement boundary verification suites:
 - `verify_rust.py`: Performs sanity checks on configurations and simple lineup setups.
 - `verify_advanced_rust.py`: Targets Platoon 2.0 adjustments, bat weight velocities, and focus state modifiers.
 - `run_pytest_against_rust.py`: Python wrapper to orchestrate the complete pytest E2E suite, validating all endpoints concurrently.
+
+## Step 8: Automated Launcher Script (`start.sh`)
+Create an entry point shell script to unify compile checks and startup orchestration:
+- Automatically check for node/npm availability if the `static/` directory does not contain `index.html`.
+- Run frontend builds dynamically to prepare embedded resources.
+- Execute `cargo run --release` to run the compiled high-performance Axum application.
+

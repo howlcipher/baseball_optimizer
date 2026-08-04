@@ -1,12 +1,17 @@
 import sys
 import json
 import random
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("pybaseball_bridge")
 
 try:
     import pybaseball
     PYBASEBALL_AVAILABLE = True
 except ImportError:
     PYBASEBALL_AVAILABLE = False
+    logger.error("pybaseball module not found")
 
 def get_mlb_team_abbr(team_name: str) -> str:
     mapping = {
@@ -44,7 +49,9 @@ def get_mlb_team_abbr(team_name: str) -> str:
     return mapping.get(team_name, "CHC")
 
 def fetch_roster(team_name: str):
+    logger.info(f"Fetching roster for team: {team_name}")
     if not PYBASEBALL_AVAILABLE:
+        logger.error("pybaseball not installed")
         print(json.dumps({"error": "pybaseball not installed"}))
         sys.exit(1)
         
@@ -82,13 +89,16 @@ def fetch_roster(team_name: str):
                 "base_ops": ops
             })
             
+        logger.info(f"Successfully fetched roster for {team_name}, count: {len(players_list)}")
         print(json.dumps(players_list))
     except Exception as e:
+        logger.error(f"Error fetching roster for {team_name}: {e}")
         print(json.dumps({"error": str(e)}))
         sys.exit(1)
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
+        logger.error("Team name not provided")
         print(json.dumps({"error": "Team name required"}))
         sys.exit(1)
     fetch_roster(sys.argv[1])

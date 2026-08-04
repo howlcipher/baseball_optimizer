@@ -1,22 +1,33 @@
 import urllib.request
 import json
+import logging
 from mcp.server.fastmcp import FastMCP
 from typing import Any
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("mcp_server")
 
 mcp = FastMCP("Baseball Optimizer")
 import os
 API_BASE = os.environ.get("API_BASE", "http://127.0.0.1:8080/api/v1")
 
 def request_json(url: str, data: Any = None, method: str = "GET") -> dict:
-    req = urllib.request.Request(url, method=method)
-    req.add_header('Content-Type', 'application/json')
-    if data is not None:
-        data_bytes = json.dumps(data).encode('utf-8')
-        req.add_header('Content-Length', str(len(data_bytes)))
-        resp = urllib.request.urlopen(req, data=data_bytes)
-    else:
-        resp = urllib.request.urlopen(req)
-    return json.loads(resp.read().decode('utf-8'))
+    logger.info(f"Making {method} request to {url}")
+    try:
+        req = urllib.request.Request(url, method=method)
+        req.add_header('Content-Type', 'application/json')
+        if data is not None:
+            data_bytes = json.dumps(data).encode('utf-8')
+            req.add_header('Content-Length', str(len(data_bytes)))
+            resp = urllib.request.urlopen(req, data=data_bytes)
+        else:
+            resp = urllib.request.urlopen(req)
+        response_data = json.loads(resp.read().decode('utf-8'))
+        logger.info(f"Request to {url} successful")
+        return response_data
+    except Exception as e:
+        logger.error(f"Error in request_json: {e}")
+        raise
 
 @mcp.tool()
 def optimize_lineup(opposing_pitcher_handedness: str, situational_leverage: str) -> dict:

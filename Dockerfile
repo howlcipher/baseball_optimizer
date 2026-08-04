@@ -40,7 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Set up Python virtual environment and install pybaseball
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install --no-cache-dir pybaseball
+RUN pip install --no-cache-dir pybaseball fastmcp
 
 # Copy binary from builder
 COPY --from=builder /usr/src/app/target/release/baseball_optimizer /usr/local/bin/baseball_optimizer

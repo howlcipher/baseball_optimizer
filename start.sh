@@ -84,8 +84,12 @@ echo "Launching Rust Axum backend server..."
 cargo run --release &
 SERVER_PID=$!
 
+echo "Launching MCP server..."
+MCP_TRANSPORT=sse MCP_PORT=8001 python3 scripts/mcp_server.py &
+MCP_PID=$!
+
 # Clean up background process on script exit
-trap 'kill $SERVER_PID 2>/dev/null || true' EXIT INT TERM
+trap 'kill $SERVER_PID $MCP_PID 2>/dev/null || true' EXIT INT TERM
 
 echo ""
 echo "=================================================="
@@ -97,7 +101,8 @@ echo ""
 # Wait for user keypress
 read -r
 
-echo "Stopping server (PID $SERVER_PID)..."
-kill $SERVER_PID 2>/dev/null || true
+echo "Stopping server (PID $SERVER_PID) and MCP server (PID $MCP_PID)..."
+kill $SERVER_PID $MCP_PID 2>/dev/null || true
 wait $SERVER_PID 2>/dev/null || true
-echo "Server stopped successfully."
+wait $MCP_PID 2>/dev/null || true
+echo "Servers stopped successfully."

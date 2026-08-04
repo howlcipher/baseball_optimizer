@@ -4,7 +4,8 @@ from mcp.server.fastmcp import FastMCP
 from typing import Any
 
 mcp = FastMCP("Baseball Optimizer")
-API_BASE = "http://127.0.0.1:8080/api/v1"
+import os
+API_BASE = os.environ.get("API_BASE", "http://127.0.0.1:8080/api/v1")
 
 def request_json(url: str, data: Any = None, method: str = "GET") -> dict:
     req = urllib.request.Request(url, method=method)
@@ -58,4 +59,10 @@ def swap_context(team_id: int) -> dict:
     return request_json(f"{API_BASE}/config/swap-context", data=payload, method="POST")
 
 if __name__ == "__main__":
-    mcp.run()
+    import os
+    if os.environ.get("MCP_TRANSPORT") == "sse":
+        port = int(os.environ.get("MCP_PORT", "8001"))
+        host = os.environ.get("MCP_HOST", "0.0.0.0")
+        mcp.run(transport="sse", host=host, port=port)
+    else:
+        mcp.run()

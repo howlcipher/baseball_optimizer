@@ -56,5 +56,23 @@ services:
       timeout: 5s
       retries: 5
 
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: baseball_mcp
+    restart: always
+    ports:
+      - "8001:8001"
+    environment:
+      MCP_TRANSPORT: "sse"
+      MCP_PORT: "8001"
+      MCP_HOST: "0.0.0.0"
+      API_BASE: "http://backend:8080/api/v1"
+    command: ["python3", "scripts/mcp_server.py"]
+    depends_on:
+      backend:
+        condition: service_healthy
+
 volumes:
   pgdata:
